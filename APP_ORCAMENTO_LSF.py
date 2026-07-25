@@ -35,7 +35,7 @@ with st.sidebar:
         st.write("### AMÂNCIO")
     st.write("### 🔗 Conexões Google Sheets")
     link_valores = st.text_input("Link da Aba VALORES:", value="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv")
-    link_memorial = st.text_input("Link do Navegador da Aba MEMORIAL:", placeholder="Cole aqui o link da barra superior...")
+    link_memorial = st.text_input("Link do Navegador da Aba MEMORIAL:", placeholder="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/edit?gid=819485538#gid=819485538")
     
     st.info("Copie o link da barra do seu navegador (URL) enquanto estiver visualizando a aba MEMORIAL e cole no campo acima.")
 
