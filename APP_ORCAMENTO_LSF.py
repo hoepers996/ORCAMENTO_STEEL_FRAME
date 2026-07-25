@@ -9,11 +9,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak, KeepTogether
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
+import urllib.request
 import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.3.1", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.5", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -30,6 +31,16 @@ COR_TEXTO = colors.HexColor(HEX_TEXTO)
 
 URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
+
+# BANCO DE DADOS DE IMAGENS ILUSTRATIVAS PADRÃO DA AMÂNCIO
+IMAGENS_PADRAO_URLS = {
+    "01": "http://googleusercontent.com/image_collection/image_retrieval/8567998266774374876_0", # Canteiro/Projeto
+    "05": "http://googleusercontent.com/image_collection/image_retrieval/10659000347661223125_0", # Radier/Fundacao
+    "06": "http://googleusercontent.com/image_collection/image_retrieval/14810977087391760498_0", # Estrutura Steel Frame
+    "07": "http://googleusercontent.com/image_collection/image_retrieval/4702636625285986385_0",  # Fechamentos OSB/Cimenticia
+    "10": "http://googleusercontent.com/image_collection/image_retrieval/11587467863573504691_0", # Instalacoes PEX/Eletrica
+    "13": "http://googleusercontent.com/image_collection/image_retrieval/10854864543814634235_0"  # Casa Pronta / Acabamentos
+}
 
 # 2. CARREGAMENTO DE DADOS
 @st.cache_data(ttl=15)
@@ -81,9 +92,33 @@ with st.sidebar:
     st.write("### 🟢 Conexão com Google Sheets")
     st.success("Planilha de Custos Conectada")
     st.success("Memorial Descritivo Conectado")
+    st.info("🖼️ Catálogo de Imagens Automático Ativado!")
 
-# 3. GERADORES DE DASHBOARDS CORRIGIDOS
+# FUNÇÃO DE OBTENÇÃO DE IMAGENS DA ETAPA
+def obter_image_reader_etapa(prefix):
+    # 1. Procura arquivo local primeiro (prioridade para fotos próprias)
+    for ext in ['.jpg', '.png', '.jpeg', '.JPG', '.PNG']:
+        local_path = f"img_{prefix}{ext}"
+        if os.path.exists(local_path):
+            try:
+                return ImageReader(local_path)
+            except:
+                pass
 
+    # 2. Se não houver arquivo local, busca do banco de imagens automático
+    if prefix in IMAGENS_PADRAO_URLS:
+        try:
+            url = IMAGENS_PADRAO_URLS[prefix]
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = resp.read()
+                return ImageReader(io.BytesIO(data))
+        except:
+            pass
+            
+    return None
+
+# 3. GERADORES DE DASHBOARDS
 def processar_macro_etapas(df, valor_total):
     macro_map = {
         '01': '1. Canteiro e Gestão', '02': '1. Canteiro e Gestão', '03': '1. Canteiro e Gestão', '04': '1. Canteiro e Gestão',
@@ -96,38 +131,28 @@ def processar_macro_etapas(df, valor_total):
     df_macro['MACRO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
     grouped = df_macro.groupby('MACRO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
     
-    ordem_correta = [
-        '1. Canteiro e Gestão', '2. Fundação e Infra', '3. Estrutura LSF/Telhado', 
-        '4. Vedações/Instalações', '5. Acabamentos/Externos'
-    ]
+    ordem_correta = ['1. Canteiro e Gestão', '2. Fundação e Infra', '3. Estrutura LSF/Telhado', '4. Vedações/Instalações', '5. Acabamentos/Externos']
     grouped['MACRO'] = pd.Categorical(grouped['MACRO'], categories=ordem_correta, ordered=True)
     grouped = grouped.sort_values('MACRO')
-    
     grouped['PESO'] = grouped['CUSTO_FINAL_COM_BDI'] / valor_total
     return grouped
 
 def plot_custo_etapa(grouped, valor_total):
     fig = plt.figure(figsize=(8, 4), facecolor=HEX_FUNDO)
     ax = fig.add_subplot(111)
-    
     palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
     
     wedges, texts, autotexts = ax.pie(
-        grouped['CUSTO_FINAL_COM_BDI'], 
-        labels=grouped['MACRO'], 
-        autopct='%1.1f%%', 
-        startangle=140, 
-        colors=palette,
+        grouped['CUSTO_FINAL_COM_BDI'], labels=grouped['MACRO'], autopct='%1.1f%%', 
+        startangle=140, colors=palette,
         wedgeprops=dict(width=0.45, edgecolor=HEX_FUNDO, linewidth=2),
-        textprops=dict(fontsize=9, fontweight='bold', color=HEX_TEXTO),
-        pctdistance=0.75
+        textprops=dict(fontsize=9, fontweight='bold', color=HEX_TEXTO), pctdistance=0.75
     )
     plt.setp(autotexts, size=9, weight="bold", color="white")
     
     centre_circle = plt.Circle((0,0), 0.55, fc=HEX_FUNDO)
     ax.add_artist(centre_circle)
     ax.annotate(f"TOTAL\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=12, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
-    
     ax.axis('equal') 
     plt.tight_layout()
     buf = io.BytesIO()
@@ -158,16 +183,15 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     if max_end > m:
         fator = m / max_end
         starts = [s * fator for s in starts]
-        durations = [d * fator for d in durations] # FIX: Corrigido for d in durations
+        durations = [d * fator for d in durations]
         
     macro_tasks = grouped['MACRO'].tolist()[::-1]
     starts = starts[::-1]
     durations = durations[::-1]
     
-    # --- GANTT ---
+    # GANTT
     fig_gantt = plt.figure(figsize=(9, 2.8), facecolor=HEX_FUNDO)
     ax_gantt = fig_gantt.add_subplot(111)
-    
     for i in range(5):
         rect = patches.Rectangle((starts[i], i-0.35), durations[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', linewidth=1)
         ax_gantt.add_patch(rect)
@@ -192,7 +216,7 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     plt.close(fig_gantt)
     buf_gantt.seek(0)
     
-    # --- CURVA S ---
+    # CURVA S
     fig_curva = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO)
     ax_curva = fig_curva.add_subplot(111)
     
@@ -221,7 +245,6 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     ax_curva.set_ylim(0, max(perc_mensal) * 1.25)
     ax_curva.set_yticks([0, 10, 20, 30])
     ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=HEX_PRIMARIA)
-    
     ax_line.set_ylim(0, 110)
     ax_line.set_yticks([]) 
     
@@ -231,12 +254,10 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     ax_curva.spines['left'].set_visible(False)
     ax_curva.spines['bottom'].set_color(HEX_PRIMARIA)
     ax_curva.spines['bottom'].set_linewidth(1.5)
-    
     ax_line.spines['top'].set_visible(False)
     ax_line.spines['right'].set_visible(False)
     ax_line.spines['left'].set_visible(False)
     ax_line.spines['bottom'].set_visible(False)
-    
     ax_curva.grid(axis='y', color=HEX_GRID, linestyle='-', linewidth=1, zorder=1)
 
     plt.tight_layout()
@@ -247,7 +268,7 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     
     return buf_gantt, buf_curva
 
-# FUNÇÕES DE PAGINAÇÃO DO PDF
+# FUNÇÕES DE PAGINAÇÃO
 def primeira_pagina(canvas, doc): pass
 def paginas_seguintes(canvas, doc):
     canvas.saveState()
@@ -266,10 +287,10 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     sub_cover = ParagraphStyle('CoverSub', fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=COR_DESTAQUE, alignment=1, spaceAfter=20)
     h1_style = ParagraphStyle('H1Style', fontName='Helvetica-Bold', fontSize=14, leading=17, textColor=COR_PRIMARIA, spaceAfter=4)
     h2_style = ParagraphStyle('H2Style', fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COR_DESTAQUE, spaceBefore=10, spaceAfter=4)
-    h3_style = ParagraphStyle('H3Style', fontName='Helvetica-Bold', fontSize=9, leading=12, textColor=COR_PRIMARIA, spaceBefore=10, spaceAfter=2)
-    body = ParagraphStyle('Body', fontName='Helvetica', fontSize=8, leading=10.5, textColor=COR_TEXTO)
-    body_bold = ParagraphStyle('BodyBold', fontName='Helvetica-Bold', fontSize=8, leading=10.5, textColor=COR_TEXTO)
-    body_bold_white = ParagraphStyle('BodyBoldWhite', fontName='Helvetica-Bold', fontSize=8, leading=10.5, textColor=colors.white)
+    h3_style = ParagraphStyle('H3Style', fontName='Helvetica-Bold', fontSize=10, leading=12, textColor=COR_PRIMARIA, spaceBefore=10, spaceAfter=2)
+    body = ParagraphStyle('Body', fontName='Helvetica', fontSize=8.5, leading=11.5, textColor=COR_TEXTO)
+    body_bold = ParagraphStyle('BodyBold', fontName='Helvetica-Bold', fontSize=8.5, leading=11.5, textColor=COR_TEXTO)
+    body_bold_white = ParagraphStyle('BodyBoldWhite', fontName='Helvetica-Bold', fontSize=8.5, leading=11.5, textColor=colors.white)
     
     elements = []
     
@@ -305,7 +326,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.3 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.5 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -329,7 +350,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("02", body), Paragraph("Sumário, Apresentação da Amâncio e Vantagens da Engenharia LSF", body), Paragraph("02", body)],
         [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada", body), Paragraph("03", body)],
         [Paragraph("04", body), Paragraph("Síntese de Previsibilidade e Dashboards Analíticos", body), Paragraph("04", body)],
-        [Paragraph("05", body), Paragraph("Memorial Descritivo: Escopo Analítico (Inclusos e Não Inclusos)", body), Paragraph("05", body)]
+        [Paragraph("05", body), Paragraph("Memorial Descritivo e Catálogo de Escopo com Imagens", body), Paragraph("05", body)]
     ]
     t_sumario = Table(sumario_data, colWidths=[55, 405, 40])
     t_sumario.setStyle(TableStyle([
@@ -422,8 +443,8 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     
     elements.append(PageBreak())
 
-    # --- PÁGINA 5+: MEMORIAL DESCRITIVO LIDO DA PLANILHA ---
-    elements.append(Paragraph("MEMORIAL DESCRITIVO PRELIMINAR (ESCOPO)", h1_style))
+    # --- PÁGINA 5+: MEMORIAL DESCRITIVO ILUSTRADO COM AUTO-FETCH ---
+    elements.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL DESCRITIVO", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
     elements.append(Paragraph("Relação analítica de componentes, materiais e serviços contemplados (ou não) nesta estimativa de custos:", body))
     elements.append(Spacer(1, 10))
@@ -445,17 +466,31 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
             if not df_filtro.empty:
                 texto_explicativo = str(df_filtro.iloc[0][col_desc])
                 if pd.isna(texto_explicativo) or texto_explicativo == "nan": 
-                    texto_explicativo = "Etapa construtiva."
+                    texto_explicativo = "Etapa construtiva e de engenharia."
                 
+                # BUSCADOR INTELIGENTE DE IMAGENS (LOCAL OU WEB)
+                img_reader = obter_image_reader_etapa(prefix)
+                img_flowable = None
+                
+                if img_reader:
+                    try:
+                        iw, ih = img_reader.getSize()
+                        aspect = iw / float(ih)
+                        new_w = 2.4 * inch
+                        new_h = new_w / aspect
+                        if new_h > 2.0 * inch:
+                            new_h = 2.0 * inch
+                            new_w = new_h * aspect
+                        img_flowable = Image(img_reader, width=new_w, height=new_h)
+                    except:
+                        pass
+
                 tabela_memorial = []
-                tabela_memorial.append(Paragraph(sub_full, h3_style))
-                tabela_memorial.append(Paragraph(f"<i>{texto_explicativo}</i>", body))
-                tabela_memorial.append(Spacer(1, 4))
                 
                 mem_data = [[
-                    Paragraph("<b>ITEM / SERVIÇO</b>", body_bold_white),
+                    Paragraph("<b>COMPONENTE / SERVIÇO</b>", body_bold_white),
                     Paragraph("<b>STATUS</b>", body_bold_white),
-                    Paragraph("<b>OBSERVAÇÕES / PADRÃO</b>", body_bold_white)
+                    Paragraph("<b>OBSERVAÇÕES</b>", body_bold_white)
                 ]]
                 
                 for _, item_row in df_filtro.iterrows():
@@ -474,16 +509,40 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                     mem_data.append([Paragraph(servico, body), Paragraph(status_f, body), Paragraph(obs, body)])
                     
                 if len(mem_data) > 1:
-                    t_mem = Table(mem_data, colWidths=[190, 80, 230])
-                    t_mem.setStyle(TableStyle([
-                        ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
-                        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
-                        ('PADDING', (0,0), (-1,-1), 3),
-                        ('ALIGN', (1,1), (1,-1), 'CENTER'),
-                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ]))
-                    tabela_memorial.append(t_mem)
-                    tabela_memorial.append(Spacer(1, 8))
+                    if img_flowable:
+                        t_mem = Table(mem_data, colWidths=[120, 60, 140])
+                        t_mem.setStyle(TableStyle([
+                            ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
+                            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+                            ('PADDING', (0,0), (-1,-1), 3),
+                            ('ALIGN', (1,1), (1,-1), 'CENTER'),
+                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                        ]))
+                        
+                        bloco_esq = [Paragraph(sub_full, h3_style), Paragraph(f"<i>{texto_explicativo}</i>", body), Spacer(1, 4), t_mem]
+                        t_layout = Table([[bloco_esq, img_flowable]], colWidths=[335, 175])
+                        t_layout.setStyle(TableStyle([
+                            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+                            ('PADDING', (0,0), (-1,-1), 0),
+                            ('LEFTPADDING', (1,0), (1,-1), 10)
+                        ]))
+                        tabela_memorial.append(t_layout)
+                    else:
+                        t_mem = Table(mem_data, colWidths=[190, 80, 230])
+                        t_mem.setStyle(TableStyle([
+                            ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
+                            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+                            ('PADDING', (0,0), (-1,-1), 3),
+                            ('ALIGN', (1,1), (1,-1), 'CENTER'),
+                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                        ]))
+                        tabela_memorial.append(Paragraph(sub_full, h3_style))
+                        tabela_memorial.append(Paragraph(f"<i>{texto_explicativo}</i>", body))
+                        tabela_memorial.append(Spacer(1, 4))
+                        tabela_memorial.append(t_mem)
+                        
+                    tabela_memorial.append(Spacer(1, 15))
                     elements.append(KeepTogether(tabela_memorial))
 
     doc.build(elements, onFirstPage=primeira_pagina, onLaterPages=paginas_seguintes)
@@ -521,10 +580,10 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.3)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.5)", use_container_width=True)
 
 if submitted:
-    with st.spinner("Sincronizando com o Google Sheets e processando PDF..."):
+    with st.spinner("Sincronizando com o Google Sheets, baixando fotos do catálogo e processando PDF..."):
         df_val, status_val = carregar_valores_sheets()
         df_mem, status_mem = carregar_memorial_sheets()
         
@@ -568,12 +627,12 @@ if submitted:
             padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ CATÁLOGO V4.5 GERADO COM SUCESSO!")
         
         st.download_button(
-            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO)",
+            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO COM ILUSTRAÇÕES)",
             data=pdf_bytes,
-            file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
+            file_name=f"DOSSIE_AMANCIO_V4.5_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
