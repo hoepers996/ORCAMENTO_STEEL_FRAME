@@ -7,12 +7,13 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.units import inch
 import io
+import base64
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V1.6", page_icon="🏗️", layout="centered")
+st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V1.7", page_icon="🏗️", layout="centered")
 
 st.title("🏗️ GERADOR DE ORÇAMENTOS - STEEL FRAME")
-st.subheader("ESTIMATIVA PARAMÉTRICA DETALHADA V1.6 (MAT/MO SEPARADOS)")
+st.subheader("ESTIMATIVA PARAMÉTRICA V1.7 (COM PRÉ-VISUALIZAÇÃO DE PDF)")
 
 st.markdown("---")
 
@@ -76,7 +77,7 @@ def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, pa
     
     elements = []
     elements.append(Paragraph("PROPOSTA COMERCIAL PRELIMINAR — LIGHT STEEL FRAME", title_style))
-    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V1.6)", subtitle_style))
+    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V1.7)", subtitle_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=12))
     
     dados_cliente = [
@@ -200,10 +201,10 @@ with st.form("form_orcamento"):
     
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA (V1.6)")
+    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA (V1.7)")
 
 if submitted:
-    st.success("✅ CÁLCULOS EXECUTADOS NA VERSÃO 1.6!")
+    st.success("✅ CÁLCULOS EXECUTADOS COM SUCESSO!")
     
     df = carregar_dados_google_sheets()
     
@@ -257,9 +258,18 @@ if submitted:
     
     pdf_bytes = gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], padrao, bdi, df, valor_total, valor_m2, exibir_separado)
     
+    # GERAR CODIFICAÇÃO BASE64 PARA PREVIEW NO NAVEGADOR
+    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700" type="application/pdf"></iframe>'
+
+    # BOTÃO DE DOWNLOAD
     st.download_button(
-        label="📥 BAIXAR PROPOSTA COMERCIAL V1.6 EM PDF",
+        label="📥 BAIXAR PROPOSTA COMERCIAL V1.7 EM PDF",
         data=pdf_bytes,
-        file_name=f"PROPOSTA_V1_6_{cliente.replace(' ', '_').upper()}.pdf",
+        file_name=f"PROPOSTA_V1_7_{cliente.replace(' ', '_').upper()}.pdf",
         mime="application/pdf"
     )
+
+    # ABA EXPANDÍVEL DE PRÉ-VISUALIZAÇÃO NA TELA
+    with st.expander("👁️ CLIQUE AQUI PARA VISUALIZAR A PROPOSTA NA TELA (PRÉ-VISUALIZAÇÃO)"):
+        st.markdown(pdf_display, unsafe_allow_html=True)
