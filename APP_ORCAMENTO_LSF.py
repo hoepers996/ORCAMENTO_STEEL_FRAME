@@ -9,12 +9,11 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak, KeepTogether
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
-import urllib.request
 import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.5", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.6", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -31,16 +30,6 @@ COR_TEXTO = colors.HexColor(HEX_TEXTO)
 
 URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
-
-# BANCO DE DADOS DE IMAGENS ILUSTRATIVAS PADRÃO DA AMÂNCIO
-IMAGENS_PADRAO_URLS = {
-    "01": "http://googleusercontent.com/image_collection/image_retrieval/8567998266774374876_0", # Canteiro/Projeto
-    "05": "http://googleusercontent.com/image_collection/image_retrieval/10659000347661223125_0", # Radier/Fundacao
-    "06": "http://googleusercontent.com/image_collection/image_retrieval/14810977087391760498_0", # Estrutura Steel Frame
-    "07": "http://googleusercontent.com/image_collection/image_retrieval/4702636625285986385_0",  # Fechamentos OSB/Cimenticia
-    "10": "http://googleusercontent.com/image_collection/image_retrieval/11587467863573504691_0", # Instalacoes PEX/Eletrica
-    "13": "http://googleusercontent.com/image_collection/image_retrieval/10854864543814634235_0"  # Casa Pronta / Acabamentos
-}
 
 # 2. CARREGAMENTO DE DADOS
 @st.cache_data(ttl=15)
@@ -92,11 +81,11 @@ with st.sidebar:
     st.write("### 🟢 Conexão com Google Sheets")
     st.success("Planilha de Custos Conectada")
     st.success("Memorial Descritivo Conectado")
-    st.info("🖼️ Catálogo de Imagens Automático Ativado!")
+    st.info("🎨 Gerador de Cards Ilustrativos Nativos Ativado!")
 
-# FUNÇÃO DE OBTENÇÃO DE IMAGENS DA ETAPA
-def obter_image_reader_etapa(prefix):
-    # 1. Procura arquivo local primeiro (prioridade para fotos próprias)
+# GERADOR DE CARDS ILUSTRATIVOS TÉCNICOS (100% OFFLINE E INFALÍVEL)
+def gerar_card_ilustrativo_etapa(prefix, sub_nome):
+    # 1. Tenta carregar imagem local do GitHub primeiro
     for ext in ['.jpg', '.png', '.jpeg', '.JPG', '.PNG']:
         local_path = f"img_{prefix}{ext}"
         if os.path.exists(local_path):
@@ -105,18 +94,55 @@ def obter_image_reader_etapa(prefix):
             except:
                 pass
 
-    # 2. Se não houver arquivo local, busca do banco de imagens automático
-    if prefix in IMAGENS_PADRAO_URLS:
-        try:
-            url = IMAGENS_PADRAO_URLS[prefix]
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                data = resp.read()
-                return ImageReader(io.BytesIO(data))
-        except:
-            pass
-            
-    return None
+    # 2. Se não houver foto local, desenha um Card Técnico Blueprint em memória!
+    fig, ax = plt.subplots(figsize=(4.5, 3.2), facecolor='#0F2C3D')
+    ax.set_facecolor('#0F2C3D')
+    ax.axis('off')
+    
+    # Grade Blueprint
+    for x in np.linspace(0, 1, 10):
+        ax.axvline(x, color='#205475', linestyle='--', alpha=0.3)
+    for y in np.linspace(0, 1, 10):
+        ax.axhline(y, color='#205475', linestyle='--', alpha=0.3)
+        
+    # Esquema visual dinâmico por etapa
+    if prefix in ['01', '02', '03', '04']:
+        rect = patches.Rectangle((0.2, 0.35), 0.6, 0.35, facecolor='#205475', edgecolor='#E83F25', linewidth=2)
+        ax.add_patch(rect)
+        ax.text(0.5, 0.52, "CANTEIRO & PROJETOS", color='white', fontweight='bold', fontsize=10, ha='center')
+    elif prefix in ['05', '09']:
+        rect = patches.Rectangle((0.15, 0.3), 0.7, 0.2, facecolor='#CBD5E0', edgecolor='#0F2C3D', linewidth=2)
+        ax.add_patch(rect)
+        for x_p in np.linspace(0.2, 0.8, 6):
+            ax.plot([x_p, x_p], [0.3, 0.5], color='#E83F25', linewidth=2)
+        ax.text(0.5, 0.4, "BASE RADIER DE CONCRETO", color='#0F2C3D', fontweight='bold', fontsize=8.5, ha='center')
+    elif prefix in ['06', '08']:
+        for x_p in np.linspace(0.2, 0.8, 5):
+            rect = patches.Rectangle((x_p-0.03, 0.25), 0.06, 0.5, facecolor='#4299E1', edgecolor='white', linewidth=1)
+            ax.add_patch(rect)
+        ax.plot([0.15, 0.85], [0.72, 0.72], color='#E83F25', linewidth=3)
+        ax.plot([0.15, 0.85], [0.28, 0.28], color='#E83F25', linewidth=3)
+        ax.text(0.5, 0.5, "PERFIS AÇO STEEL FRAME Z275", color='white', fontweight='bold', fontsize=8, ha='center', bbox=dict(facecolor='#0F2C3D', pad=2))
+    elif prefix in ['07', '10', '11', '12']:
+        rect = patches.Rectangle((0.2, 0.25), 0.6, 0.5, facecolor='#319795', alpha=0.8)
+        ax.add_patch(rect)
+        ax.plot([0.2, 0.8], [0.4, 0.6], color='#E83F25', linewidth=3)
+        ax.plot([0.2, 0.8], [0.6, 0.4], color='#4299E1', linewidth=3)
+        ax.text(0.5, 0.8, "INSTALAÇÕES E VEDAÇÕES", color='white', fontweight='bold', fontsize=9, ha='center')
+    else:
+        rect = patches.Rectangle((0.25, 0.25), 0.5, 0.4, facecolor='#E2E8F0', edgecolor='#E83F25', linewidth=2)
+        ax.add_patch(rect)
+        ax.plot([0.2, 0.5, 0.8], [0.65, 0.85, 0.65], color='#0F2C3D', linewidth=3)
+        ax.text(0.5, 0.45, "ACABAMENTOS E FACHADA", color='#0F2C3D', fontweight='bold', fontsize=8.5, ha='center')
+        
+    ax.text(0.5, 0.12, f"AMÂNCIO • ESQUEMA TÉCNICO ETAPA {prefix}", color='#CBD5E0', fontsize=8, fontweight='bold', ha='center')
+    
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor())
+    plt.close(fig)
+    buf.seek(0)
+    return ImageReader(buf)
 
 # 3. GERADORES DE DASHBOARDS
 def processar_macro_etapas(df, valor_total):
@@ -326,7 +352,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.5 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.6 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -443,7 +469,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     
     elements.append(PageBreak())
 
-    # --- PÁGINA 5+: MEMORIAL DESCRITIVO ILUSTRADO COM AUTO-FETCH ---
+    # --- PÁGINA 5+: MEMORIAL DESCRITIVO ILUSTRADO NATIVO ---
     elements.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL DESCRITIVO", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
     elements.append(Paragraph("Relação analítica de componentes, materiais e serviços contemplados (ou não) nesta estimativa de custos:", body))
@@ -468,19 +494,16 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                 if pd.isna(texto_explicativo) or texto_explicativo == "nan": 
                     texto_explicativo = "Etapa construtiva e de engenharia."
                 
-                # BUSCADOR INTELIGENTE DE IMAGENS (LOCAL OU WEB)
-                img_reader = obter_image_reader_etapa(prefix)
+                # OBTÉM O CARD ILUSTRATIVO (DA PASTA LOCAL OU GERADO NATIVAMENTE EM MEMÓRIA)
+                img_reader = gerar_card_ilustrativo_etapa(prefix, sub_full)
                 img_flowable = None
                 
                 if img_reader:
                     try:
                         iw, ih = img_reader.getSize()
                         aspect = iw / float(ih)
-                        new_w = 2.4 * inch
+                        new_w = 2.2 * inch
                         new_h = new_w / aspect
-                        if new_h > 2.0 * inch:
-                            new_h = 2.0 * inch
-                            new_w = new_h * aspect
                         img_flowable = Image(img_reader, width=new_w, height=new_h)
                     except:
                         pass
@@ -510,7 +533,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                     
                 if len(mem_data) > 1:
                     if img_flowable:
-                        t_mem = Table(mem_data, colWidths=[120, 60, 140])
+                        t_mem = Table(mem_data, colWidths=[115, 60, 140])
                         t_mem.setStyle(TableStyle([
                             ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
                             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
@@ -520,12 +543,12 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                         ]))
                         
                         bloco_esq = [Paragraph(sub_full, h3_style), Paragraph(f"<i>{texto_explicativo}</i>", body), Spacer(1, 4), t_mem]
-                        t_layout = Table([[bloco_esq, img_flowable]], colWidths=[335, 175])
+                        t_layout = Table([[bloco_esq, img_flowable]], colWidths=[330, 180])
                         t_layout.setStyle(TableStyle([
                             ('VALIGN', (0,0), (-1,-1), 'TOP'),
                             ('ALIGN', (1,0), (1,-1), 'RIGHT'),
                             ('PADDING', (0,0), (-1,-1), 0),
-                            ('LEFTPADDING', (1,0), (1,-1), 10)
+                            ('LEFTPADDING', (1,0), (1,-1), 8)
                         ]))
                         tabela_memorial.append(t_layout)
                     else:
@@ -542,7 +565,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                         tabela_memorial.append(Spacer(1, 4))
                         tabela_memorial.append(t_mem)
                         
-                    tabela_memorial.append(Spacer(1, 15))
+                    tabela_memorial.append(Spacer(1, 14))
                     elements.append(KeepTogether(tabela_memorial))
 
     doc.build(elements, onFirstPage=primeira_pagina, onLaterPages=paginas_seguintes)
@@ -580,10 +603,10 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.5)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.6)", use_container_width=True)
 
 if submitted:
-    with st.spinner("Sincronizando com o Google Sheets, baixando fotos do catálogo e processando PDF..."):
+    with st.spinner("Sincronizando com o Google Sheets e gerando PDF com Ilustrações..."):
         df_val, status_val = carregar_valores_sheets()
         df_mem, status_mem = carregar_memorial_sheets()
         
@@ -627,12 +650,12 @@ if submitted:
             padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva
         )
         
-        st.success("✅ DOSSIÊ CATÁLOGO V4.5 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ CATÁLOGO V4.6 GERADO COM SUCESSO!")
         
         st.download_button(
-            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO COM ILUSTRAÇÕES)",
+            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF ILUSTRADO)",
             data=pdf_bytes,
-            file_name=f"DOSSIE_AMANCIO_V4.5_{cliente.replace(' ', '_').upper()}.pdf",
+            file_name=f"DOSSIE_AMANCIO_V4.6_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
