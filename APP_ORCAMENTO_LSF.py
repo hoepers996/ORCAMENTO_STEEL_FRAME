@@ -13,7 +13,7 @@ import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V5.2", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V5.3", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -31,11 +31,9 @@ COR_TEXTO = colors.HexColor(HEX_TEXTO)
 URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
-# INICIALIZAÇÃO DE ESTADOS DA SESSÃO
-if 'escopo_mat' not in st.session_state:
-    st.session_state.escopo_mat = [True] * 17
-if 'escopo_mo' not in st.session_state:
-    st.session_state.escopo_mo = [True] * 17
+# INICIALIZAÇÃO DE ESTADOS DA SESSÃO PARA OS BOTÕES
+if 'escopo_status' not in st.session_state:
+    st.session_state.escopo_status = ["COMPLETO (MAT + M.O.)"] * 17
 
 # 2. CARREGAMENTO DE DADOS
 @st.cache_data(ttl=15)
@@ -139,8 +137,8 @@ def gerar_card_ilustrativo_etapa(prefix, sub_nome):
     buf.seek(0)
     return ImageReader(buf)
 
-# 3. GERADORES DE DASHBOARDS
-def processar_macro_etapas(df, valor_total_mercado):
+# 3. GERADORES DE DASHBOARDS (DINÂMICOS PARA MERCADO E CONTRATO)
+def processar_macro_etapas(df, valor_total, col_val='TOTAL_MERCADO'):
     macro_map = {
         '01': '1. Canteiro e Gestão', '02': '1. Canteiro e Gestão', '03': '1. Canteiro e Gestão', '04': '1. Canteiro e Gestão',
         '05': '2. Fundação e Infra', '09': '2. Fundação e Infra',
@@ -150,23 +148,27 @@ def processar_macro_etapas(df, valor_total_mercado):
     }
     df_macro = df.copy()
     df_macro['MACRO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
-    grouped = df_macro.groupby('MACRO')['TOTAL_MERCADO'].sum().reset_index()
+    grouped = df_macro.groupby('MACRO')[col_val].sum().reset_index()
     ordem_correta = ['1. Canteiro e Gestão', '2. Fundação e Infra', '3. Estrutura LSF/Telhado', '4. Vedações/Instalações', '5. Acabamentos/Externos']
     grouped['MACRO'] = pd.Categorical(grouped['MACRO'], categories=ordem_correta, ordered=True)
     grouped = grouped.sort_values('MACRO')
-    grouped['PESO'] = grouped['TOTAL_MERCADO'] / valor_total_mercado
+    grouped['PESO'] = grouped[col_val] / valor_total if valor_total > 0 else 0
     return grouped
 
-def plot_custo_etapa(grouped, valor_total_mercado):
+def plot_custo_etapa(grouped, valor_total, col_val='TOTAL_MERCADO', label="MERCADO"):
     fig = plt.figure(figsize=(8, 4), facecolor=HEX_FUNDO)
     ax = fig.add_subplot(111)
-    palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
-    wedges, texts, autotexts = ax.pie(grouped['TOTAL_MERCADO'], labels=grouped['MACRO'], autopct='%1.1f%%', startangle=140, colors=palette, wedgeprops=dict(width=0.45, edgecolor=HEX_FUNDO, linewidth=2), textprops=dict(fontsize=9, fontweight='bold', color=HEX_TEXTO), pctdistance=0.75)
-    plt.setp(autotexts, size=9, weight="bold", color="white")
-    centre_circle = plt.Circle((0,0), 0.55, fc=HEX_FUNDO)
-    ax.add_artist(centre_circle)
-    ax.annotate(f"TOTAL ESTIMADO\n(MERCADO)\nR$ {valor_total_mercado/1000:,.0f}k", xy=(0, 0), fontsize=10, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
-    ax.axis('equal') 
+    if valor_total == 0:
+        ax.text(0.5, 0.5, "NENHUM ITEM SELECIONADO NESTE ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontsize=12, fontweight='bold')
+        ax.axis('off')
+    else:
+        palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
+        wedges, texts, autotexts = ax.pie(grouped[col_val], labels=grouped['MACRO'], autopct='%1.1f%%', startangle=140, colors=palette, wedgeprops=dict(width=0.45, edgecolor=HEX_FUNDO, linewidth=2), textprops=dict(fontsize=9, fontweight='bold', color=HEX_TEXTO), pctdistance=0.75)
+        plt.setp(autotexts, size=9, weight="bold", color="white")
+        centre_circle = plt.Circle((0,0), 0.55, fc=HEX_FUNDO)
+        ax.add_artist(centre_circle)
+        ax.annotate(f"TOTAL ESTIMADO\n({label})\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=10, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
+        ax.axis('equal') 
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
@@ -177,11 +179,22 @@ def plot_custo_etapa(grouped, valor_total_mercado):
 def plot_gantt_e_curvas(grouped, prazo_meses):
     pesos = grouped['PESO'].tolist()
     m = prazo_meses
-    d1 = max(m * pesos[0] * 1.5, m * 0.2); d2 = max(m * pesos[1] * 2.0, m * 0.2); d3 = max(m * pesos[2] * 2.0, m * 0.3)
-    d4 = max(m * pesos[3] * 1.8, m * 0.3); d5 = max(m * pesos[4] * 2.0, m * 0.3)
-    durations = [d1, d2, d3, d4, d5]
-    s1 = 0; s2 = s1 + (d1 * 0.3); s3 = s2 + (d2 * 0.5); s4 = s3 + (d3 * 0.4); s5 = s4 + (d4 * 0.6)
+    
+    durations = []
+    for i in range(5):
+        if pesos[i] == 0:
+            durations.append(0)
+        else:
+            min_dur = m * 0.2 if i < 2 else m * 0.3
+            durations.append(max(m * pesos[i] * 2.0, min_dur))
+            
+    s1 = 0
+    s2 = s1 + (durations[0] * 0.3 if durations[0] > 0 else 0)
+    s3 = s2 + (durations[1] * 0.5 if durations[1] > 0 else 0)
+    s4 = s3 + (durations[2] * 0.4 if durations[2] > 0 else 0)
+    s5 = s4 + (durations[3] * 0.6 if durations[3] > 0 else 0)
     starts = [s1, s2, s3, s4, s5]
+    
     max_end = max([starts[i] + durations[i] for i in range(5)])
     if max_end > m:
         fator = m / max_end
@@ -192,40 +205,63 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     starts = starts[::-1]
     durations = durations[::-1]
     
+    # GANTT
     fig_gantt = plt.figure(figsize=(9, 2.8), facecolor=HEX_FUNDO)
     ax_gantt = fig_gantt.add_subplot(111)
-    for i in range(5):
-        rect = patches.Rectangle((starts[i], i-0.35), durations[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', linewidth=1)
-        ax_gantt.add_patch(rect)
-        ax_gantt.text(starts[i] + 0.1, i, macro_tasks[i], va='center', color='white', fontweight='bold', fontsize=9)
-    ax_gantt.set_xlim(0, prazo_meses); ax_gantt.set_ylim(-0.5, 4.5); ax_gantt.set_xticks(range(0, prazo_meses + 1)); ax_gantt.set_xticklabels([f'Mês {i}' for i in range(prazo_meses + 1)], fontsize=9, color=HEX_PRIMARIA)
-    ax_gantt.tick_params(axis='x', length=5, width=1.5, color=HEX_PRIMARIA); ax_gantt.grid(axis='x', color=HEX_GRID, linestyle='-', linewidth=1, zorder=0); ax_gantt.set_yticks([]); ax_gantt.spines['top'].set_visible(False); ax_gantt.spines['right'].set_visible(False); ax_gantt.spines['left'].set_visible(False); ax_gantt.spines['bottom'].set_color(HEX_PRIMARIA); ax_gantt.spines['bottom'].set_linewidth(1.5)
+    
+    if max_end == 0:
+        ax_gantt.text(0.5, 0.5, "NENHUM ITEM SELECIONADO NESTE ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontsize=12, fontweight='bold')
+        ax_gantt.axis('off')
+    else:
+        for i in range(5):
+            if durations[i] > 0:
+                rect = patches.Rectangle((starts[i], i-0.35), durations[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', linewidth=1)
+                ax_gantt.add_patch(rect)
+                ax_gantt.text(starts[i] + 0.1, i, macro_tasks[i], va='center', color='white', fontweight='bold', fontsize=9)
+        ax_gantt.set_xlim(0, prazo_meses); ax_gantt.set_ylim(-0.5, 4.5); ax_gantt.set_xticks(range(0, prazo_meses + 1)); ax_gantt.set_xticklabels([f'Mês {i}' for i in range(prazo_meses + 1)], fontsize=9, color=HEX_PRIMARIA)
+        ax_gantt.tick_params(axis='x', length=5, width=1.5, color=HEX_PRIMARIA); ax_gantt.grid(axis='x', color=HEX_GRID, linestyle='-', linewidth=1, zorder=0); ax_gantt.set_yticks([]); ax_gantt.spines['top'].set_visible(False); ax_gantt.spines['right'].set_visible(False); ax_gantt.spines['left'].set_visible(False); ax_gantt.spines['bottom'].set_color(HEX_PRIMARIA); ax_gantt.spines['bottom'].set_linewidth(1.5)
+
     plt.tight_layout()
     buf_gantt = io.BytesIO()
     plt.savefig(buf_gantt, format='png', dpi=300, bbox_inches='tight', facecolor=fig_gantt.get_facecolor())
     plt.close(fig_gantt)
     buf_gantt.seek(0)
     
+    # CURVA S
     fig_curva = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO)
     ax_curva = fig_curva.add_subplot(111)
-    x_coords = np.arange(0.5, prazo_meses + 0.5)
-    meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
-    pico_previsto = sum([starts[i] + (durations[i]/2) for i in range(5)]) / 5 
-    deslocamento = (pico_previsto / m) * 4 - 2 
-    x = np.linspace(-2.5, 2.5, prazo_meses)
-    weights = np.exp(-(x - deslocamento)**2)
-    perc_mensal = (weights / weights.sum()) * 100
-    perc_acum = np.cumsum(perc_mensal)
-    bars = ax_curva.bar(x_coords, perc_mensal, color=HEX_SECUNDARIA, width=0.55, zorder=2)
-    ax_line = ax_curva.twinx()
-    ax_line.plot(x_coords, perc_acum, color=HEX_DESTAQUE, marker='o', linewidth=3.5, markersize=6, zorder=3)
-    for bar in bars:
-        h = bar.get_height()
-        ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=HEX_PRIMARIA)
-    ax_curva.set_xlim(0, prazo_meses); ax_curva.set_xticks(x_coords); ax_curva.set_xticklabels(meses_labels, fontsize=9, color=HEX_PRIMARIA); ax_curva.set_ylim(0, max(perc_mensal) * 1.25); ax_curva.set_yticks([0, 10, 20, 30]); ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=HEX_PRIMARIA)
-    ax_line.set_ylim(0, 110); ax_line.set_yticks([]) 
-    ax_curva.tick_params(axis='x', length=0, labelsize=9, colors=HEX_PRIMARIA); ax_curva.spines['top'].set_visible(False); ax_curva.spines['right'].set_visible(False); ax_curva.spines['left'].set_visible(False); ax_curva.spines['bottom'].set_color(HEX_PRIMARIA); ax_curva.spines['bottom'].set_linewidth(1.5); ax_line.spines['top'].set_visible(False); ax_line.spines['right'].set_visible(False); ax_line.spines['left'].set_visible(False); ax_line.spines['bottom'].set_visible(False)
-    ax_curva.grid(axis='y', color=HEX_GRID, linestyle='-', linewidth=1, zorder=1)
+    
+    if max_end == 0:
+        ax_curva.text(0.5, 0.5, "NENHUM ITEM SELECIONADO NESTE ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontsize=12, fontweight='bold')
+        ax_curva.axis('off')
+    else:
+        x_coords = np.arange(0.5, prazo_meses + 0.5)
+        meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
+        
+        # Ponderação do pico
+        somas = 0
+        for i in range(5):
+            if durations[i] > 0: somas += (starts[i] + (durations[i]/2))
+        qtd_validos = sum(1 for d in durations if d > 0)
+        pico_previsto = (somas / qtd_validos) if qtd_validos > 0 else m/2
+        
+        deslocamento = (pico_previsto / m) * 4 - 2 
+        x = np.linspace(-2.5, 2.5, prazo_meses)
+        weights = np.exp(-(x - deslocamento)**2)
+        perc_mensal = (weights / weights.sum()) * 100
+        perc_acum = np.cumsum(perc_mensal)
+        
+        bars = ax_curva.bar(x_coords, perc_mensal, color=HEX_SECUNDARIA, width=0.55, zorder=2)
+        ax_line = ax_curva.twinx()
+        ax_line.plot(x_coords, perc_acum, color=HEX_DESTAQUE, marker='o', linewidth=3.5, markersize=6, zorder=3)
+        for bar in bars:
+            h = bar.get_height()
+            ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=HEX_PRIMARIA)
+        ax_curva.set_xlim(0, prazo_meses); ax_curva.set_xticks(x_coords); ax_curva.set_xticklabels(meses_labels, fontsize=9, color=HEX_PRIMARIA); ax_curva.set_ylim(0, max(perc_mensal) * 1.25); ax_curva.set_yticks([0, 10, 20, 30]); ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=HEX_PRIMARIA)
+        ax_line.set_ylim(0, 110); ax_line.set_yticks([]) 
+        ax_curva.tick_params(axis='x', length=0, labelsize=9, colors=HEX_PRIMARIA); ax_curva.spines['top'].set_visible(False); ax_curva.spines['right'].set_visible(False); ax_curva.spines['left'].set_visible(False); ax_curva.spines['bottom'].set_color(HEX_PRIMARIA); ax_curva.spines['bottom'].set_linewidth(1.5); ax_line.spines['top'].set_visible(False); ax_line.spines['right'].set_visible(False); ax_line.spines['left'].set_visible(False); ax_line.spines['bottom'].set_visible(False)
+        ax_curva.grid(axis='y', color=HEX_GRID, linestyle='-', linewidth=1, zorder=1)
+
     plt.tight_layout()
     buf_curva = io.BytesIO()
     plt.savefig(buf_curva, format='png', dpi=300, bbox_inches='tight', facecolor=fig_curva.get_facecolor())
@@ -234,7 +270,6 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     
     return buf_gantt, buf_curva
 
-# FUNÇÕES DE PAGINAÇÃO
 def primeira_pagina(canvas, doc): pass
 def paginas_seguintes(canvas, doc):
     canvas.saveState()
@@ -243,8 +278,8 @@ def paginas_seguintes(canvas, doc):
     canvas.drawRightString(letter[0] - 36, 25, f"Página {doc.page}")
     canvas.restoreState()
 
-# 4. GERADOR DO DOSSIÊ PDF (COM 18 PARÂMETROS CORRETOS)
-def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, df_mem, val_mercado_total, val_contrato_total, tot_mat_contrato, tot_mo_contrato, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva):
+# 4. GERADOR DO DOSSIÊ PDF COMPLETO
+def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, df, df_mem, val_mercado_total, val_contrato_total, tot_mat_contrato, tot_mo_contrato, prazo_meses, exibir_separado, graficos_mercado, graficos_contrato):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
     styles = getSampleStyleSheet()
@@ -257,7 +292,6 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     body_bold = ParagraphStyle('BodyBold', fontName='Helvetica-Bold', fontSize=8.5, leading=11.5, textColor=COR_TEXTO)
     body_bold_white = ParagraphStyle('BodyBoldWhite', fontName='Helvetica-Bold', fontSize=8.5, leading=11.5, textColor=colors.white)
     
-    valor_m2 = val_mercado_total / area_m2 if area_m2 > 0 else 0
     elements = []
     
     # --- PÁGINA 1: CAPA ---
@@ -289,7 +323,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V5.2 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V5.3 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),('PADDING', (0,0), (-1,-1), 6.5),]))
@@ -308,8 +342,9 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("01", body), Paragraph("Capa Comercial Institucional e Dados do Cliente", body), Paragraph("01", body)],
         [Paragraph("02", body), Paragraph("Sumário, Apresentação da Amâncio e Vantagens da Engenharia LSF", body), Paragraph("02", body)],
         [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada", body), Paragraph("03", body)],
-        [Paragraph("04", body), Paragraph("Síntese de Previsibilidade e Dashboards Analíticos", body), Paragraph("04", body)],
-        [Paragraph("05", body), Paragraph("Memorial Descritivo e Catálogo de Escopo com Imagens", body), Paragraph("05", body)]
+        [Paragraph("04", body), Paragraph("Dashboards de Mercado (Estimativa de 100% da Obra)", body), Paragraph("04", body)],
+        [Paragraph("05", body), Paragraph("Dashboards Exclusivos do Contrato (Seu Escopo)", body), Paragraph("05", body)],
+        [Paragraph("06", body), Paragraph("Memorial Descritivo e Catálogo de Escopo com Imagens", body), Paragraph("06", body)]
     ]
     t_sumario = Table(sumario_data, colWidths=[55, 405, 40])
     t_sumario.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_PRIMARIA),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),('PADDING', (0,0), (-1,-1), 4.5),]))
@@ -354,17 +389,17 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         for idx, row in df.iterrows():
             status_txt = row["STATUS"]
             if "NÃO" in status_txt: sf = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
-            elif "100%" in status_txt: sf = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
+            elif "COMPLETO" in status_txt: sf = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
             else: sf = f'<font color="{HEX_SECUNDARIA}"><b>{status_txt}</b></font>'
             data_table.append([Paragraph(str(row["SUBSISTEMA"]), body), Paragraph(sf, body), f"R$ {row['MAT_CONTRATO']:,.2f}", f"R$ {row['MO_CONTRATO']:,.2f}", f"R$ {row['TOTAL_MERCADO']:,.2f}"])
         data_table.append([Paragraph("<b>TOTAL GERAL</b>", body_bold), Paragraph("<b>-</b>", body_bold), Paragraph(f"<b>R$ {tot_mat_contrato:,.2f}</b>", body_bold), Paragraph(f"<b>R$ {tot_mo_contrato:,.2f}</b>", body_bold), Paragraph(f"<b>R$ {val_mercado_total:,.2f}</b>", body_bold)])
-        t_detalhes = Table(data_table, colWidths=[150, 85, 80, 80, 105])
+        t_detalhes = Table(data_table, colWidths=[150, 95, 75, 75, 105])
     else:
         data_table = [[Paragraph("<b>SUBSISTEMA</b>", body_bold_white), Paragraph("<b>STATUS CONTRATO</b>", body_bold_white), Paragraph("<b>VALOR CONTRATO</b>", body_bold_white), Paragraph("<b>TOTAL MERCADO</b>", body_bold_white)]]
         for idx, row in df.iterrows():
             status_txt = row["STATUS"]
             if "NÃO" in status_txt: sf = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
-            elif "100%" in status_txt: sf = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
+            elif "COMPLETO" in status_txt: sf = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
             else: sf = f'<font color="{HEX_SECUNDARIA}"><b>{status_txt}</b></font>'
             data_table.append([Paragraph(str(row["SUBSISTEMA"]), body), Paragraph(sf, body), f"R$ {row['TOTAL_CONTRATO']:,.2f}", f"R$ {row['TOTAL_MERCADO']:,.2f}"])
         data_table.append([Paragraph("<b>TOTAL GERAL</b>", body_bold), Paragraph("<b>-</b>", body_bold), Paragraph(f"<b>R$ {val_contrato_total:,.2f}</b>", body_bold), Paragraph(f"<b>R$ {val_mercado_total:,.2f}</b>", body_bold)])
@@ -374,30 +409,42 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(t_detalhes)
     elements.append(PageBreak())
     
-    # --- PÁGINA 4: DASHBOARDS ---
-    elements.append(Paragraph("SÍNTESE DE PREVISIBILIDADE E FLUXO DE EXECUÇÃO", h1_style))
+    # --- PÁGINA 4: DASHBOARDS DO MERCADO (100% DA OBRA) ---
+    elements.append(Paragraph("DASHBOARDS DO ORÇAMENTO GLOBAL (VISÃO DE MERCADO)", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
-    elements.append(Paragraph("<i>Nota: Os gráficos abaixo ilustram a visão panorâmica de 100% da obra (Estimativa de Mercado).</i>", body))
+    elements.append(Paragraph("<i>Estes gráficos ilustram o planejamento de 100% da obra, englobando todas as etapas construtivas para sua programação financeira.</i>", body))
     elements.append(Spacer(1, 4))
-    elements.append(Paragraph("6. COMPOSIÇÃO DE CUSTO POR MACRO-ETAPAS", h2_style))
-    elements.append(Image(buf_rosca, width=5.5*inch, height=2.75*inch))
-    elements.append(Paragraph("7. CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA (PONDERADO)", h2_style))
-    elements.append(Image(buf_gantt, width=6.6*inch, height=2.0*inch))
-    elements.append(Paragraph("8. FLUXO DE DESEMBOLSO FINANCEIRO E CURVA S ACUMULADA", h2_style))
-    elements.append(Image(buf_curva, width=6.6*inch, height=2.3*inch))
+    elements.append(Paragraph("COMPOSIÇÃO DE CUSTO ESTIMADO POR MACRO-ETAPAS", h2_style))
+    elements.append(Image(graficos_mercado[0], width=5.5*inch, height=2.75*inch))
+    elements.append(Paragraph("CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA (100%)", h2_style))
+    elements.append(Image(graficos_mercado[1], width=6.6*inch, height=2.0*inch))
+    elements.append(Paragraph("FLUXO DE DESEMBOLSO MENSAL PREVISTO E CURVA S", h2_style))
+    elements.append(Image(graficos_mercado[2], width=6.6*inch, height=2.3*inch))
+    elements.append(PageBreak())
+    
+    # --- PÁGINA 5: DASHBOARDS DO CONTRATO ---
+    elements.append(Paragraph("DASHBOARDS DO SEU CONTRATO (ESCOPO AMÂNCIO)", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
+    elements.append(Paragraph("<i>Estes gráficos foram filtrados para exibir exclusivamente as etapas e valores que compõem o escopo do contrato com a Amâncio.</i>", body))
+    elements.append(Spacer(1, 4))
+    elements.append(Paragraph("DISTRIBUIÇÃO FINANCEIRA DO SEU CONTRATO", h2_style))
+    elements.append(Image(graficos_contrato[0], width=5.5*inch, height=2.75*inch))
+    elements.append(Paragraph("CRONOGRAMA DE ATUAÇÃO AMÂNCIO (GANTT ADAPTADO)", h2_style))
+    elements.append(Image(graficos_contrato[1], width=6.6*inch, height=2.0*inch))
+    elements.append(Paragraph("APORTES EXCLUSIVOS DO CONTRATO E CURVA S", h2_style))
+    elements.append(Image(graficos_contrato[2], width=6.6*inch, height=2.3*inch))
     elements.append(PageBreak())
 
-    # --- PÁGINA 5+: MEMORIAL DESCRITIVO ILUSTRADO ---
+    # --- PÁGINA 6+: MEMORIAL DESCRITIVO ILUSTRADO (SEM COLUNA STATUS) ---
     elements.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL DESCRITIVO", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
-    elements.append(Paragraph("Relação analítica de componentes, materiais e serviços contemplados (ou não) nesta estimativa de custos:", body))
+    elements.append(Paragraph("Relação analítica de componentes e serviços para o entendimento técnico do escopo construtivo:", body))
     elements.append(Spacer(1, 10))
 
     if df_mem.empty:
          elements.append(Paragraph("<i>Nenhum item de memorial carregado da planilha.</i>", body))
     else:
         col_item = 'ITEM' if 'ITEM' in df_mem.columns else df_mem.columns[2]
-        col_status = 'STATUS' if 'STATUS' in df_mem.columns else df_mem.columns[3]
         col_obs = 'OBSERVACAO' if 'OBSERVACAO' in df_mem.columns else (df_mem.columns[4] if len(df_mem.columns) > 4 else df_mem.columns[-1])
         col_desc = 'DESCRICAO_ETAPA' if 'DESCRICAO_ETAPA' in df_mem.columns else df_mem.columns[1]
 
@@ -422,31 +469,28 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                     except: pass
 
                 tabela_memorial = []
-                mem_data = [[Paragraph("<b>COMPONENTE / SERVIÇO</b>", body_bold_white), Paragraph("<b>STATUS</b>", body_bold_white), Paragraph("<b>OBSERVAÇÕES</b>", body_bold_white)]]
+                mem_data = [[Paragraph("<b>COMPONENTE / SERVIÇO</b>", body_bold_white), Paragraph("<b>OBSERVAÇÕES E PADRÃO CONSTRUTIVO</b>", body_bold_white)]]
                 
                 for _, item_row in df_filtro.iterrows():
                     servico = str(item_row.get(col_item, ''))
-                    status_txt = str(item_row.get(col_status, '')).upper().strip()
                     obs = str(item_row.get(col_obs, ''))
                     
                     if pd.isna(servico) or servico == "nan": continue
                     if pd.isna(obs) or obs == "nan": obs = "-"
                     
-                    if "NÃO" in status_txt or "NAO" in status_txt: status_f = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
-                    else: status_f = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
-                    mem_data.append([Paragraph(servico, body), Paragraph(status_f, body), Paragraph(obs, body)])
+                    mem_data.append([Paragraph(servico, body), Paragraph(obs, body)])
                     
                 if len(mem_data) > 1:
                     if img_flowable:
-                        t_mem = Table(mem_data, colWidths=[115, 60, 140])
-                        t_mem.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),('PADDING', (0,0), (-1,-1), 3),('ALIGN', (1,1), (1,-1), 'CENTER'),('VALIGN', (0,0), (-1,-1), 'MIDDLE'),]))
+                        t_mem = Table(mem_data, colWidths=[130, 185])
+                        t_mem.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),('PADDING', (0,0), (-1,-1), 3),('VALIGN', (0,0), (-1,-1), 'MIDDLE'),]))
                         bloco_esq = [Paragraph(sub_full, h3_style), Paragraph(f"<i>{texto_explicativo}</i>", body), Spacer(1, 4), t_mem]
                         t_layout = Table([[bloco_esq, img_flowable]], colWidths=[330, 180])
                         t_layout.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'),('ALIGN', (1,0), (1,-1), 'RIGHT'),('PADDING', (0,0), (-1,-1), 0),('LEFTPADDING', (1,0), (1,-1), 8)]))
                         tabela_memorial.append(t_layout)
                     else:
-                        t_mem = Table(mem_data, colWidths=[190, 80, 230])
-                        t_mem.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),('PADDING', (0,0), (-1,-1), 3),('ALIGN', (1,1), (1,-1), 'CENTER'),('VALIGN', (0,0), (-1,-1), 'MIDDLE'),]))
+                        t_mem = Table(mem_data, colWidths=[200, 300])
+                        t_mem.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),('PADDING', (0,0), (-1,-1), 3),('VALIGN', (0,0), (-1,-1), 'MIDDLE'),]))
                         tabela_memorial.append(Paragraph(sub_full, h3_style))
                         tabela_memorial.append(Paragraph(f"<i>{texto_explicativo}</i>", body))
                         tabela_memorial.append(Spacer(1, 4))
@@ -461,6 +505,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
 
 # 5. INTERFACE DO USUÁRIO STREAMLIT
 df_base, _ = carregar_valores_sheets()
+n_itens = len(df_base)
 
 st.write("### 📝 DADOS GERAIS DO PROJETO E CLIENTE")
 
@@ -479,43 +524,49 @@ tipo_fundacao = col6.selectbox("COMPLEXIDADE DA FUNDAÇÃO:", ["LEVE (SOLO BOM /
 prazo_meses = st.slider("PRAZO ESTIMADO DE EXECUÇÃO DA OBRA (MESES):", min_value=3, max_value=12, value=6, step=1)
 
 st.write("### 🎛️ DEFINIÇÃO DO SEU ESCOPO DE CONTRATO")
-st.info("Desmarque (✅) os itens que NÃO farão parte do seu contrato. Eles aparecerão no relatório como 'Estimativa de Mercado'.")
+st.info("Utilize a coluna 'STATUS DO CONTRATO' para definir se a etapa contempla Material e Mão de Obra. Use os botões abaixo para preenchimento rápido.")
 
-# BOTEIS DE AÇÃO RÁPIDA FORA DO FORM PARA RESPOSTA INSTANTÂNEA
+# CALLBACKS PARA OS BOTOES
+def set_all_status(novo_status):
+    st.session_state.escopo_status = [novo_status] * n_itens
+
 btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
-if btn_col1.button("✅ Marcar Todos Materiais"):
-    st.session_state.escopo_mat = [True] * 17
-if btn_col2.button("❌ ZERAR Materiais"):
-    st.session_state.escopo_mat = [False] * 17
-if btn_col3.button("✅ Marcar Toda M.O."):
-    st.session_state.escopo_mo = [True] * 17
-if btn_col4.button("❌ ZERAR M.O."):
-    st.session_state.escopo_mo = [False] * 17
+if btn_col1.button("✅ Escopo Completo (Mat+M.O.)", use_container_width=True): set_all_status("COMPLETO (MAT + M.O.)")
+if btn_col2.button("👷 Somente Mão de Obra", use_container_width=True): set_all_status("SÓ MÃO DE OBRA")
+if btn_col3.button("🧱 Somente Materiais", use_container_width=True): set_all_status("SÓ MATERIAL")
+if btn_col4.button("❌ Zerar Todo o Contrato", use_container_width=True): set_all_status("NÃO INCLUSO")
 
-n_itens = len(df_base)
-if len(st.session_state.escopo_mat) != n_itens: st.session_state.escopo_mat = [True] * n_itens
-if len(st.session_state.escopo_mo) != n_itens: st.session_state.escopo_mo = [True] * n_itens
+if len(st.session_state.escopo_status) != n_itens: 
+    st.session_state.escopo_status = ["COMPLETO (MAT + M.O.)"] * n_itens
 
 df_opcoes = pd.DataFrame({
     "SUBSISTEMA": df_base["SUBSISTEMA"],
-    "FORNECER MATERIAL": st.session_state.escopo_mat,
-    "FORNECER M.O.": st.session_state.escopo_mo
+    "STATUS DO CONTRATO": st.session_state.escopo_status
 })
 
-df_editado = st.data_editor(df_opcoes, hide_index=True, use_container_width=True)
-
-st.session_state.escopo_mat = df_editado["FORNECER MATERIAL"].tolist()
-st.session_state.escopo_mo = df_editado["FORNECER M.O."].tolist()
+df_editado = st.data_editor(
+    df_opcoes, 
+    hide_index=True, 
+    use_container_width=True,
+    column_config={
+        "STATUS DO CONTRATO": st.column_config.SelectboxColumn(
+            "STATUS DO CONTRATO",
+            options=["COMPLETO (MAT + M.O.)", "SÓ MATERIAL", "SÓ MÃO DE OBRA", "NÃO INCLUSO"],
+            required=True
+        )
+    }
+)
+st.session_state.escopo_status = df_editado["STATUS DO CONTRATO"].tolist()
 
 st.write("### ⚙️ FORMATO DE EXIBIÇÃO E MARGEM BDI")
 opcao_exibicao = st.radio("COMO DESEJA EXIBIR OS VALORES NO DOSSIÊ PDF?", ["JUNTOS (VALOR UNIFICADO)", "SEPARADOS (MATERIAL E MÃO DE OBRA)"], index=0)
 exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
 bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
 
-submitted = st.button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V5.2)", use_container_width=True, type="primary")
+submitted = st.button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V5.3)", use_container_width=True, type="primary")
 
 if submitted:
-    with st.spinner("Sincronizando com o Google Sheets e calculando escopo customizado..."):
+    with st.spinner("Sincronizando com o Google Sheets, calculando Dashboards Múltiplos e gerando PDF..."):
         df_val, status_val = carregar_valores_sheets()
         df_mem, status_mem = carregar_memorial_sheets()
         
@@ -536,20 +587,24 @@ if submitted:
             mat_item = consumo * c_mat * fator_padrao * fator_extra * area_aplicada * (1 + bdi)
             mo_item = consumo * c_mo * fator_padrao * fator_extra * area_aplicada * (1 + bdi)
             
-            inc_mat = df_editado.at[idx, "FORNECER MATERIAL"]
-            inc_mo = df_editado.at[idx, "FORNECER M.O."]
+            status_sel = df_editado.at[idx, "STATUS DO CONTRATO"]
             
-            mat_contrato = mat_item if inc_mat else 0.0
-            mo_contrato = mo_item if inc_mo else 0.0
-            
-            if inc_mat and inc_mo: status_txt = "100% INCLUSO"
-            elif inc_mat and not inc_mo: status_txt = "SÓ MATERIAIS"
-            elif not inc_mat and inc_mo: status_txt = "SÓ MÃO DE OBRA"
-            else: status_txt = "NÃO INCLUSO"
+            if status_sel == "COMPLETO (MAT + M.O.)":
+                mat_contrato = mat_item
+                mo_contrato = mo_item
+            elif status_sel == "SÓ MATERIAL":
+                mat_contrato = mat_item
+                mo_contrato = 0.0
+            elif status_sel == "SÓ MÃO DE OBRA":
+                mat_contrato = 0.0
+                mo_contrato = mo_item
+            else: # NÃO INCLUSO
+                mat_contrato = 0.0
+                mo_contrato = 0.0
             
             c_mat_mercado.append(mat_item); c_mo_mercado.append(mo_item)
             c_mat_contrato.append(mat_contrato); c_mo_contrato.append(mo_contrato)
-            status_lista.append(status_txt)
+            status_lista.append(status_sel)
 
         df_val["MAT_MERCADO"] = c_mat_mercado
         df_val["MO_MERCADO"] = c_mo_mercado
@@ -564,19 +619,28 @@ if submitted:
         tot_mat_contrato = df_val["MAT_CONTRATO"].sum()
         tot_mo_contrato = df_val["MO_CONTRATO"].sum()
         
-        grouped = processar_macro_etapas(df_val, val_mercado_total)
-        buf_rosca = plot_custo_etapa(grouped, val_mercado_total)
-        buf_gantt, buf_curva = plot_gantt_e_curvas(grouped, prazo_meses)
+        # DASHBOARDS MERCADO
+        grouped_mercado = processar_macro_etapas(df_val, val_mercado_total, 'TOTAL_MERCADO')
+        buf_rosca_m = plot_custo_etapa(grouped_mercado, val_mercado_total, 'TOTAL_MERCADO', "MERCADO")
+        buf_gantt_m, buf_curva_m = plot_gantt_e_curvas(grouped_mercado, prazo_meses)
+        graf_m = [buf_rosca_m, buf_gantt_m, buf_curva_m]
         
+        # DASHBOARDS CONTRATO
+        grouped_contrato = processar_macro_etapas(df_val, val_contrato_total, 'TOTAL_CONTRATO')
+        buf_rosca_c = plot_custo_etapa(grouped_contrato, val_contrato_total, 'TOTAL_CONTRATO', "CONTRATO")
+        buf_gantt_c, buf_curva_c = plot_gantt_e_curvas(grouped_contrato, prazo_meses)
+        graf_c = [buf_rosca_c, buf_gantt_c, buf_curva_c]
+        
+        # PDF COM DASHBOARDS DUPLOS
         pdf_bytes = gerar_dossie_pdf_bytes(
             cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
-            padrao, bdi, df_val, df_mem, val_mercado_total, val_contrato_total, tot_mat_contrato, tot_mo_contrato, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva
+            padrao, bdi, df_val, df_mem, val_mercado_total, val_contrato_total, tot_mat_contrato, tot_mo_contrato, prazo_meses, exibir_separado, graf_m, graf_c
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V5.2 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL V5.3 GERADO COM SUCESSO!")
         
         st.download_button(
-            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (ESCOPO CUSTOMIZADO)",
+            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF DUPLO)",
             data=pdf_bytes,
             file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
