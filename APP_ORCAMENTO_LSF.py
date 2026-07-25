@@ -13,7 +13,7 @@ import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.0", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.1", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -43,22 +43,12 @@ def carregar_valores_sheets():
         pass
     return pd.DataFrame([
         {"SUBSISTEMA": "01. SERVIÇOS PRELIMINARES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 5.0, "CUSTO_MO_UNIT_RS": 20.0},
-        {"SUBSISTEMA": "02. GESTÃO DE OBRA E ADM", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 10.0, "CUSTO_MO_UNIT_RS": 110.0},
-        {"SUBSISTEMA": "03. INSTALAÇÕES DO CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 15.0, "CUSTO_MO_UNIT_RS": 15.0},
-        {"SUBSISTEMA": "04. LOCAÇÕES E EQUIPAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 12.0, "CUSTO_MO_UNIT_RS": 8.0},
         {"SUBSISTEMA": "05. INFRAESTRUTURA (FUNDAÇÃO)", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 180.0, "CUSTO_MO_UNIT_RS": 100.0},
         {"SUBSISTEMA": "06. SUPERESTRUTURA LSF", "CONSUMO_MEDIO_M2": 30.0, "CUSTO_MAT_UNIT_RS": 7.5, "CUSTO_MO_UNIT_RS": 3.5},
         {"SUBSISTEMA": "07. FECHAMENTOS (EXT/INT)", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 140.0, "CUSTO_MO_UNIT_RS": 80.0},
         {"SUBSISTEMA": "08. COBERTURA E TELHADO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 110.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "09. IMPERMEABILIZAÇÕES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 20.0, "CUSTO_MO_UNIT_RS": 15.0},
         {"SUBSISTEMA": "10. INSTALAÇÕES HIDRÁULICAS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 65.0, "CUSTO_MO_UNIT_RS": 45.0},
-        {"SUBSISTEMA": "11. INSTALAÇÕES ELÉTRICAS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 75.0, "CUSTO_MO_UNIT_RS": 55.0},
-        {"SUBSISTEMA": "12. CLIMATIZAÇÃO E EXAUSTÃO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 45.0, "CUSTO_MO_UNIT_RS": 30.0},
-        {"SUBSISTEMA": "13. REVESTIMENTOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 70.0, "CUSTO_MO_UNIT_RS": 70.0},
-        {"SUBSISTEMA": "14. PISOS E PAVIMENTAÇÕES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 70.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "15. ESQUADRIAS E VIDROS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 130.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "16. URBANIZAÇÃO E EXTERNOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 30.0, "CUSTO_MO_UNIT_RS": 20.0},
-        {"SUBSISTEMA": "17. LIMPEZA FINAL DA OBRA", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 3.0, "CUSTO_MO_UNIT_RS": 12.0}
+        {"SUBSISTEMA": "13. REVESTIMENTOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 70.0, "CUSTO_MO_UNIT_RS": 70.0}
     ]), "BACKUP"
 
 @st.cache_data(ttl=15)
@@ -84,117 +74,172 @@ with st.sidebar:
     st.success("Planilha de Custos Conectada")
     st.success("Memorial Descritivo Conectado")
 
-# 3. GERADOR DO PAINEL DASHBOARD COMPLETO (ESTILO BI / EXCEL DASHBOARD)
-def gerar_dashboard_bi_completo(df, valor_total, area_m2, prazo_meses, tot_mat, tot_mo, bdi):
-    c_primary = HEX_PRIMARIA
-    c_accent = HEX_DESTAQUE
-    c_secondary = HEX_SECUNDARIA
-    c_bg = '#F4F7FA'
-    c_card = '#FFFFFF'
-    c_text = HEX_TEXTO
-    c_grey_light = '#E2E8F0'
+# 3. GERADORES DE DASHBOARDS (ESTILO NOTEBOOK LM / ANALÍTICO)
 
-    fig = plt.figure(figsize=(11, 6.2), facecolor=c_bg)
-    gs = fig.add_gridspec(2, 4, width_ratios=[1.15, 1, 1, 1], height_ratios=[1, 1], wspace=0.32, hspace=0.38)
+def gerar_grafico_distribuicao(df, valor_total, tot_mat, tot_mo):
+    """Gera o painel com as roscas de materiais e etapas"""
+    fig = plt.figure(figsize=(11, 3.5), facecolor='#FFFFFF')
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.1)
 
-    # --- 1. PAINEL ESQUERDO: CARDS DE KPI ---
-    ax_kpi = fig.add_subplot(gs[:, 0])
-    ax_kpi.set_facecolor(c_bg)
-    ax_kpi.axis('off')
+    # Gráfico 1: MAT x MO
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.set_facecolor('#FFFFFF')
+    wedges, texts, autotexts = ax1.pie(
+        [tot_mat, tot_mo], labels=['Materiais', 'Mão de Obra'], autopct='%1.1f%%',
+        startangle=90, colors=['#4A7B9D', '#F29F05'],
+        wedgeprops=dict(width=0.45, edgecolor='white', linewidth=2),
+        textprops=dict(fontsize=10, fontweight='bold', color='#1C3144')
+    )
+    plt.setp(autotexts, size=10, weight="bold", color="white")
+    
+    centre_circle = plt.Circle((0,0), 0.55, fc='white')
+    ax1.add_artist(centre_circle)
+    ax1.set_title("Custo: Materiais x Mão de Obra", fontsize=14, fontweight='bold', color='#1C3144')
 
-    kpi_data = [
-        ("CUSTO TOTAL DA OBRA", f"R$ {valor_total:,.2f}", HEX_PRIMARIA),
-        ("VALOR POR M² CONSTRUÍDO", f"R$ {valor_total/area_m2:,.2f} /m²", HEX_SECUNDARIA),
-        ("TOTAL EM MATERIAIS", f"R$ {tot_mat:,.2f}", "#319795"),
-        ("TOTAL MÃO DE OBRA", f"R$ {tot_mo:,.2f}", HEX_DESTAQUE)
-    ]
-
-    for i, (title, val, color) in enumerate(kpi_data):
-        y_pos = 0.77 - (i * 0.24)
-        rect = patches.FancyBboxPatch((0.02, y_pos), 0.96, 0.20, boxstyle="round,pad=0.02", 
-                                      facecolor=c_card, edgecolor=c_grey_light, linewidth=1, transform=ax_kpi.transAxes)
-        ax_kpi.add_patch(rect)
-        rect_strip = patches.FancyBboxPatch((0.02, y_pos), 0.04, 0.20, boxstyle="round,pad=0.0", 
-                                            facecolor=color, edgecolor='none', transform=ax_kpi.transAxes)
-        ax_kpi.add_patch(rect_strip)
-        ax_kpi.text(0.10, y_pos + 0.13, title, fontsize=7.5, fontweight='bold', color='#718096', transform=ax_kpi.transAxes)
-        ax_kpi.text(0.10, y_pos + 0.04, val, fontsize=10.0, fontweight='bold', color=c_primary, transform=ax_kpi.transAxes)
-
-    # --- 2. GRÁFICO 1: CUSTO DIRETO X PROPOSTA COMERCIAL ---
-    ax1 = fig.add_subplot(gs[0, 1])
-    ax1.set_facecolor(c_card)
-    custo_direto = valor_total / (1 + bdi)
-    ax1.bar(['Custo Direto', 'Proposta\n(com BDI)'], [custo_direto/1000, valor_total/1000], color=['#A0AEC0', c_accent], width=0.50)
-    ax1.set_title("Custo Direto x Proposta Final", fontsize=8.5, fontweight='bold', color=c_primary, pad=8)
-    ax1.set_ylabel("Valor (R$ mil)", fontsize=7.0, color=c_text)
-    ax1.tick_params(labelsize=7.0)
-    ax1.grid(axis='y', linestyle='--', alpha=0.3)
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
-
-    # --- 3. GRÁFICO 2: MATERIAIS X MÃO DE OBRA ---
-    ax2 = fig.add_subplot(gs[0, 2])
-    ax2.set_facecolor(c_card)
-    wedges, texts, autotexts = ax2.pie([tot_mat, tot_mo], labels=['Materiais', 'Mão de Obra'], autopct='%1.1f%%',
-                                       startangle=90, colors=['#319795', c_accent],
-                                       wedgeprops=dict(width=0.42, edgecolor='white', linewidth=2),
-                                       textprops=dict(fontsize=7.0, fontweight='bold', color=c_text))
-    plt.setp(autotexts, size=7.0, weight="bold", color="white")
-    ax2.set_title("Materiais x Mão de Obra", fontsize=8.5, fontweight='bold', color=c_primary, pad=8)
-
-    # --- 4. GRÁFICO 3: CUSTO POR MACRO-ETAPA ---
-    ax3 = fig.add_subplot(gs[0, 3])
-    ax3.set_facecolor(c_card)
+    # Gráfico 2: ETAPAS
     macro_map = {
-        '01': '1. Canteiro', '02': '1. Canteiro', '03': '1. Canteiro', '04': '1. Canteiro',
-        '05': '2. Infra', '09': '2. Infra',
-        '06': '3. LSF/Telh', '08': '3. LSF/Telh',
-        '07': '4. Vedações', '10': '4. Vedações', '11': '4. Vedações', '12': '4. Vedações',
-        '13': '5. Acabam.', '14': '5. Acabam.', '15': '5. Acabam.', '16': '5. Acabam.', '17': '5. Acabam.'
+        '01': 'Canteiro', '02': 'Canteiro', '03': 'Canteiro', '04': 'Canteiro',
+        '05': 'Fundação', '09': 'Fundação',
+        '06': 'Estrutura LSF', '08': 'Estrutura LSF',
+        '07': 'Vedações', '10': 'Instalações', '11': 'Instalações', '12': 'Instalações',
+        '13': 'Acabamentos', '14': 'Acabamentos', '15': 'Esquadrias', '16': 'Externos', '17': 'Externos'
     }
     df_macro = df.copy()
     df_macro['MACRO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
     grouped = df_macro.groupby('MACRO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
     
-    palette_macro = [c_primary, c_secondary, c_accent, '#319795', '#D69E2E']
-    ax3.pie(grouped['CUSTO_FINAL_COM_BDI'], labels=grouped['MACRO'], startangle=140, colors=palette_macro[:len(grouped)],
-            wedgeprops=dict(width=0.42, edgecolor='white', linewidth=1.5),
-            textprops=dict(fontsize=6.5, fontweight='bold', color=c_text))
-    ax3.set_title("Custo por Macro-Etapa", fontsize=8.5, fontweight='bold', color=c_primary, pad=8)
+    ax2 = fig.add_subplot(gs[0, 1])
+    palette = ['#1C3144', '#4A7B9D', '#F29F05', '#CDD7DF', '#0F2C3D', '#205475']
+    ax2.pie(grouped['CUSTO_FINAL_COM_BDI'], labels=grouped['MACRO'], startangle=140, colors=palette[:len(grouped)],
+            wedgeprops=dict(width=0.45, edgecolor='white', linewidth=1.5),
+            textprops=dict(fontsize=8, fontweight='bold', color='#1C3144'))
+            
+    centre_circle2 = plt.Circle((0,0), 0.55, fc='white')
+    ax2.add_artist(centre_circle2)
+    ax2.set_title("Custo por Etapa Construtiva", fontsize=14, fontweight='bold', color='#1C3144')
 
-    # --- 5. GRÁFICO 4: CRONOGRAMA & CURVA S (PAINEL INFERIOR) ---
-    ax4 = fig.add_subplot(gs[1, 1:])
-    ax4.set_facecolor(c_card)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+def gerar_dashboard_notebooklm_sintese(prazo_meses):
+    """Gera o painel Síntese de Previsibilidade com Gantt, Curva S e Texto Narrativo"""
+    c_primary = '#1C3144'    
+    c_accent = '#F29F05'     
+    c_bar = '#4A7B9D'        
+    c_bg = '#EEF2F5'         
+    c_grid = '#CDD7DF'       
+
+    fig = plt.figure(figsize=(11, 7.5), facecolor=c_bg)
+    
+    plt.text(0.04, 0.94, "Síntese de Previsibilidade:", fontsize=18, fontweight='bold', color=c_primary, transform=fig.transFigure)
+    plt.text(0.04, 0.89, "Alinhamento Físico-Financeiro", fontsize=22, fontweight='bold', color=c_bar, transform=fig.transFigure)
+
+    gs = fig.add_gridspec(2, 2, width_ratios=[2.5, 1], height_ratios=[1, 1.2], wspace=0.1, hspace=0.15, top=0.82, bottom=0.08, left=0.04, right=0.96)
+
+    # --- TOP LEFT: GANTT CHART ---
+    ax_gantt = fig.add_subplot(gs[0, 0])
+    ax_gantt.set_facecolor(c_bg)
+    
+    macro_tasks = ['5. Acabamentos e Externos', '4. Vedações e Instalações', '3. Estrutura LSF e Telhado', '2. Fundação e Infra', '1. Gestão e Canteiro']
+    m = prazo_meses
+    starts = [m*0.45, m*0.3, m*0.15, m*0.05, 0]
+    durations = [m*0.5, m*0.5, m*0.45, m*0.25, m*0.25]
+    
+    for i in range(5):
+        rect = patches.Rectangle((starts[i], i-0.35), durations[i], 0.7, facecolor=c_bar, edgecolor='white', linewidth=1)
+        ax_gantt.add_patch(rect)
+        ax_gantt.text(starts[i] + 0.1, i, macro_tasks[i], va='center', color='white', fontweight='bold', fontsize=8.5)
+
+    ax_gantt.set_xlim(0, prazo_meses)
+    ax_gantt.set_ylim(-0.5, 4.5)
+    ax_gantt.set_xticks(range(0, prazo_meses + 1))
+    ax_gantt.set_xticklabels([f'Mês {i}' for i in range(prazo_meses + 1)], fontsize=9, color=c_primary)
+    ax_gantt.tick_params(axis='x', length=8, width=1.5, color=c_primary)
+    ax_gantt.grid(axis='x', color=c_grid, linestyle='-', linewidth=1)
+    
+    ax_gantt.set_yticks([])
+    ax_gantt.spines['top'].set_visible(False)
+    ax_gantt.spines['right'].set_visible(False)
+    ax_gantt.spines['left'].set_visible(False)
+    ax_gantt.spines['bottom'].set_color(c_primary)
+    ax_gantt.spines['bottom'].set_linewidth(1.5)
+
+    # Highlight (Orange Box)
+    box_x = starts[0]
+    box_w = durations[0]
+    rect_hl = patches.Rectangle((box_x, -0.6), box_w, 1.2, fill=True, facecolor=c_bg, edgecolor=c_accent, linewidth=2, alpha=0.9, zorder=3)
+    ax_gantt.add_patch(rect_hl)
+    ax_gantt.text(box_x + 0.2, 0.2, "Engenharia de Sobreposição", color=c_accent, fontweight='bold', fontsize=9, zorder=4)
+    ax_gantt.text(box_x + 0.2, -0.15, f"O método LSF permite a execução simultânea de fases,\ncomprimindo o cronograma para exatos {prazo_meses} meses.", 
+                  color=c_primary, fontsize=7.5, zorder=4)
+
+    # --- BOTTOM LEFT: S-CURVE & BARS ---
+    ax_curva = fig.add_subplot(gs[1, 0])
+    ax_curva.set_facecolor(c_bg)
     
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
-    x = np.linspace(-2, 2, prazo_meses)
+    x = np.linspace(-2.5, 2.5, prazo_meses)
     weights = np.exp(-x**2)
     perc_mensal = (weights / weights.sum()) * 100
     perc_acum = np.cumsum(perc_mensal)
     
-    bars = ax4.bar(meses_labels, perc_mensal, color=c_secondary, alpha=0.8, width=0.45, label='% Mensal')
-    ax4_line = ax4.twinx()
-    ax4_line.fill_between(meses_labels, 0, perc_acum, color=c_accent, alpha=0.1)
-    ax4_line.plot(meses_labels, perc_acum, color=c_accent, marker='o', linewidth=2.2, markersize=4.5, label='% Acumulado')
+    # Peak highlight
+    peak_idx = np.argmax(perc_mensal)
+    ax_curva.axvspan(peak_idx - 0.5, peak_idx + 0.5, color=c_accent, alpha=0.3, zorder=0)
+    con = patches.ConnectionPatch(xyA=(peak_idx, 4.5), xyB=(peak_idx, 0), coordsA="data", coordsB="data",
+                                  axesA=ax_gantt, axesB=ax_curva, color=c_accent, alpha=0.3, lw=40)
+    ax_curva.add_artist(con)
     
-    for bar in bars:
+    bars = ax_curva.bar(meses_labels, perc_mensal, color=c_bar, width=0.55, zorder=2)
+    ax_curva_line = ax_curva.twinx()
+    ax_curva_line.plot(meses_labels, perc_acum, color=c_accent, linewidth=3.5, zorder=3)
+    
+    for i, bar in enumerate(bars):
         h = bar.get_height()
-        ax4.annotate(f'{h:.1f}%', xy=(bar.get_x() + bar.get_width() / 2, h), xytext=(0, 2),
-                     textcoords="offset points", ha='center', va='bottom', fontsize=6.5, fontweight='bold', color=c_primary)
-        
-    ax4.set_title(f'Fluxo Financeiro Previsto ({prazo_meses} Meses) e Curva S Acumulada', fontsize=9.0, fontweight='bold', color=c_primary, pad=6)
-    ax4.set_ylabel('Aporte (%)', fontsize=7.0, fontweight='bold', color=c_primary)
-    ax4_line.set_ylabel('Acumulado (%)', fontsize=7.0, fontweight='bold', color=c_accent)
-    ax4.tick_params(axis='both', labelsize=7.0)
-    ax4_line.tick_params(axis='both', labelsize=7.0)
-    ax4.grid(axis='y', linestyle='--', alpha=0.3)
-    ax4.spines['top'].set_visible(False)
-    ax4_line.spines['top'].set_visible(False)
-    ax4_line.set_ylim(0, 115)
-    ax4.set_ylim(0, max(perc_mensal)*1.3)
-
-    plt.subplots_adjust(top=0.92, bottom=0.08, left=0.02, right=0.98)
+        ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color='white', 
+                      bbox=dict(facecolor=c_bar, edgecolor='none', pad=1.5), zorder=4)
+                      
+    ax_curva.set_ylim(0, max(perc_mensal) * 1.25)
+    ax_curva.set_yticks([0, 10, 20, 30])
+    ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=c_primary)
     
+    ax_curva_line.set_ylim(0, 110)
+    ax_curva_line.set_yticks([]) 
+    
+    ax_curva.tick_params(axis='x', length=0, labelsize=9, colors=c_primary)
+    ax_curva.spines['top'].set_visible(False)
+    ax_curva.spines['right'].set_visible(False)
+    ax_curva.spines['left'].set_visible(False)
+    ax_curva.spines['bottom'].set_color(c_primary)
+    ax_curva.spines['bottom'].set_linewidth(1.5)
+    ax_curva_line.spines['top'].set_visible(False)
+    ax_curva_line.spines['right'].set_visible(False)
+    ax_curva_line.spines['left'].set_visible(False)
+    ax_curva_line.spines['bottom'].set_visible(False)
+    ax_curva.grid(axis='y', color=c_grid, linestyle='-', linewidth=1, zorder=1)
+
+    # --- RIGHT SIDE: NARRATIVE TEXT BOX ---
+    ax_text = fig.add_subplot(gs[:, 1])
+    ax_text.set_facecolor(c_bg)
+    ax_text.axis('off')
+    
+    rect_text = patches.FancyBboxPatch((0, 0.1), 1, 0.8, boxstyle="round,pad=0.05", facecolor=c_bg, edgecolor=c_bar, linewidth=1.5, transform=ax_text.transAxes)
+    ax_text.add_patch(rect_text)
+    
+    peak_val = max(perc_mensal)
+    peak_month = peak_idx + 1
+    
+    text_content = f"A linha do tempo revela que o\nMês {peak_month} é o ponto de máxima\nconvergência no canteiro.\n\n"
+    text_content += "A Estrutura LSF e Telhado está\nem fase de finalização, as\nVedações e Instalações estão a\ntodo vapor, e os Acabamentos\nacabam de iniciar.\n\n"
+    text_content += "O aporte financeiro espelha com\nprecisão cirúrgica a realidade\nda execução física simultânea."
+    
+    ax_text.text(0.08, 0.85, f"Por que {peak_val:.1f}% no Mês {peak_month}?", fontsize=14, fontweight='bold', color=c_primary, transform=ax_text.transAxes)
+    ax_text.text(0.08, 0.15, text_content, fontsize=11, color=c_primary, linespacing=1.6, transform=ax_text.transAxes)
+
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
     plt.close(fig)
@@ -209,8 +254,8 @@ def paginas_seguintes(canvas, doc):
     canvas.drawRightString(letter[0] - 36, 25, f"Página {doc.page}")
     canvas.restoreState()
 
-# 4. GERADOR DO DOSSIÊ PDF COMPLETO (5+ PÁGINAS)
-def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_dash):
+# 4. GERADOR DO DOSSIÊ PDF
+def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_roscas, buf_sintese):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
     styles = getSampleStyleSheet()
@@ -258,7 +303,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.0 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.1 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -281,7 +326,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("01", body), Paragraph("Capa Comercial Institucional e Dados do Cliente", body), Paragraph("01", body)],
         [Paragraph("02", body), Paragraph("Sumário, Apresentação da Amâncio e Vantagens da Engenharia LSF", body), Paragraph("02", body)],
         [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada", body), Paragraph("03", body)],
-        [Paragraph("04", body), Paragraph("Dashboard Executivo BI: KPIs, Matriz Financeira e Curva S", body), Paragraph("04", body)],
+        [Paragraph("04", body), Paragraph("Síntese de Previsibilidade e Dashboards Analíticos", body), Paragraph("04", body)],
         [Paragraph("05", body), Paragraph("Memorial Descritivo: Escopo Analítico (Inclusos e Não Inclusos)", body), Paragraph("05", body)]
     ]
     t_sumario = Table(sumario_data, colWidths=[55, 405, 40])
@@ -320,8 +365,8 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     resumo_data = [
         [Paragraph("<b>VALOR TOTAL ESTIMADO DO PROJETO:</b>", body_bold), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold)],
         [Paragraph("<b>VALOR ESTIMADO POR M² CONSTRUÍDO:</b>", body_bold), Paragraph(f"<b>R$ {valor_m2:,.2f} / M²</b>", body_bold)],
-        [Paragraph("<b>SUBTOTAL MATERIAIS COM BDI:</b>", body), Paragraph(f"R$ {tot_mat:,.2f} ({ (tot_mat/valor_total)*100:.1f}%)", body)],
-        [Paragraph("<b>SUBTOTAL MÃO DE OBRA COM BDI:</b>", body), Paragraph(f"R$ {tot_mo:,.2f} ({ (tot_mo/valor_total)*100:.1f}%)", body)]
+        [Paragraph("<b>SUBTOTAL MATERIAIS:</b>", body), Paragraph(f"R$ {tot_mat:,.2f} ({ (tot_mat/valor_total)*100:.1f}%)", body)],
+        [Paragraph("<b>SUBTOTAL MÃO DE OBRA:</b>", body), Paragraph(f"R$ {tot_mo:,.2f} ({ (tot_mo/valor_total)*100:.1f}%)", body)]
     ]
     t_resumo = Table(resumo_data, colWidths=[220, 280])
     t_resumo.setStyle(TableStyle([
@@ -343,7 +388,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         data_table.append([Paragraph("<b>TOTAL GERAL</b>", body_bold), Paragraph(f"<b>R$ {tot_mat:,.2f}</b>", body_bold), Paragraph(f"<b>R$ {tot_mo:,.2f}</b>", body_bold), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold), Paragraph("<b>100,0%</b>", body_bold)])
         t_detalhes = Table(data_table, colWidths=[165, 95, 95, 100, 45])
     else:
-        data_table = [[Paragraph("<b>SUBSISTEMA</b>", body_bold_white), Paragraph("<b>VALOR COM BDI (R$)</b>", body_bold_white), Paragraph("<b>PART. (%)</b>", body_bold_white)]]
+        data_table = [[Paragraph("<b>SUBSISTEMA</b>", body_bold_white), Paragraph("<b>VALOR (R$)</b>", body_bold_white), Paragraph("<b>PART. (%)</b>", body_bold_white)]]
         for idx, row in df.iterrows():
             data_table.append([Paragraph(str(row["SUBSISTEMA"]), body), f"R$ {row['CUSTO_FINAL_COM_BDI']:,.2f}", f"{row['PARTICIPACAO_PCT']:.1f}%"])
         data_table.append([Paragraph("<b>TOTAL GERAL</b>", body_bold), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold), Paragraph("<b>100,0%</b>", body_bold)])
@@ -358,10 +403,12 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(t_detalhes)
     elements.append(PageBreak())
     
-    # --- PÁGINA 4: DASHBOARD EXECUTIVE BI ---
-    elements.append(Paragraph("DASHBOARD EXECUTIVO BI & PLANEJAMENTO", h1_style))
+    # --- PÁGINA 4: DASHBOARDS ESTILO NOTEBOOK LM ---
+    elements.append(Paragraph("SÍNTESE DE PREVISIBILIDADE & ANÁLISE", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
-    elements.append(Image(buf_dash, width=6.8*inch, height=4.2*inch))
+    elements.append(Image(buf_roscas, width=6.8*inch, height=2.1*inch))
+    elements.append(Spacer(1, 4))
+    elements.append(Image(buf_sintese, width=6.8*inch, height=4.6*inch))
     elements.append(PageBreak())
 
     # --- PÁGINA 5+: MEMORIAL DESCRITIVO LIDO DA PLANILHA ---
@@ -463,10 +510,10 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.0)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.1)", use_container_width=True)
 
 if submitted:
-    with st.spinner("Sincronizando com o Google Sheets e gerando Dashboard BI..."):
+    with st.spinner("Sincronizando com o Google Sheets e gerando Dossiê e Dashboards..."):
         df_val, status_val = carregar_valores_sheets()
         df_mem, status_mem = carregar_memorial_sheets()
         
@@ -499,25 +546,26 @@ if submitted:
         tot_mat_geral = df_val["CUSTO_MAT_FINAL"].sum()
         tot_mo_geral = df_val["CUSTO_MO_FINAL"].sum()
         
-        # GERAR DASHBOARD COMPLETO (BI)
-        buf_dash = gerar_dashboard_bi_completo(df_val, valor_total, area_m2, prazo_meses, tot_mat_geral, tot_mo_geral, bdi)
+        # GERAR DASHBOARDS ESTILO NOTEBOOK LM
+        buf_roscas = gerar_grafico_distribuicao(df_val, valor_total, tot_mat_geral, tot_mo_geral)
+        buf_sintese = gerar_dashboard_notebooklm_sintese(prazo_meses)
         
         # GERAR DOSSIÊ PDF
         pdf_bytes = gerar_dossie_pdf_bytes(
             cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
-            padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_dash
+            padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_roscas, buf_sintese
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V4.0 E DASHBOARD BI GERADOS COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL V4.1 GERADO COM SUCESSO!")
         
-        # VISUALIZAÇÃO DO DASHBOARD BI DIRETO NA TELA DO APP
-        st.markdown("### 📊 DASHBOARD EXECUTIVO BI")
-        st.image(buf_dash, use_container_width=True)
+        # VISUALIZAÇÃO NA TELA
+        st.image(buf_roscas, use_container_width=True)
+        st.image(buf_sintese, use_container_width=True)
         
         st.download_button(
             label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO)",
             data=pdf_bytes,
-            file_name=f"DOSSIE_AMANCIO_V4.0_{cliente.replace(' ', '_').upper()}.pdf",
+            file_name=f"DOSSIE_AMANCIO_V4.1_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
