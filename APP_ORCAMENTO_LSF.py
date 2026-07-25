@@ -13,12 +13,12 @@ import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.2", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.3", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
 HEX_SECUNDARIA = "#205475"
-HEX_FUNDO = "#F4F7FA" # Fundo mais limpo estilo painel
+HEX_FUNDO = "#F4F7FA" 
 HEX_TEXTO = "#1A202C"
 HEX_GRID = "#CDD7DF"
 
@@ -31,7 +31,7 @@ COR_TEXTO = colors.HexColor(HEX_TEXTO)
 URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
-# 2. CARREGAMENTO DE DADOS (COM BACKUP COMPLETO DOS 17 ITENS RESTAURADO)
+# 2. CARREGAMENTO DE DADOS
 @st.cache_data(ttl=15)
 def carregar_valores_sheets():
     try:
@@ -73,7 +73,6 @@ def carregar_memorial_sheets():
         pass
     return pd.DataFrame(), "ERRO_LEITURA"
 
-# MENU LATERAL STATUS
 with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", width=200)
@@ -83,41 +82,55 @@ with st.sidebar:
     st.success("Planilha de Custos Conectada")
     st.success("Memorial Descritivo Conectado")
 
-# 3. GERADORES DE DASHBOARDS SEPARADOS (ESTILO NOTEBOOK LM / PREMIUM)
+# 3. GERADORES DE DASHBOARDS CORRIGIDOS (PROPORÇÃO E PESO FINANCEIRO)
 
-def plot_custo_etapa(df, valor_total):
-    fig = plt.figure(figsize=(8, 2.5), facecolor=HEX_FUNDO)
-    ax = fig.add_subplot(111)
-    
+def processar_macro_etapas(df, valor_total):
+    # Consolidando tudo em 5 grandes macros para visualização limpa!
     macro_map = {
-        '01': '1. Canteiro', '02': '1. Canteiro', '03': '1. Canteiro', '04': '1. Canteiro',
-        '05': '2. Fundação', '09': '2. Fundação',
-        '06': '3. Estrutura LSF', '08': '3. Estrutura LSF',
-        '07': '4. Vedações', '10': '4. Instalações', '11': '4. Instalações', '12': '4. Instalações',
-        '13': '5. Acabamentos', '14': '5. Acabamentos', '15': '5. Esquadrias', '16': '5. Externos', '17': '5. Limpeza'
+        '01': '1. Canteiro e Gestão', '02': '1. Canteiro e Gestão', '03': '1. Canteiro e Gestão', '04': '1. Canteiro e Gestão',
+        '05': '2. Fundação e Infra', '09': '2. Fundação e Infra',
+        '06': '3. Estrutura LSF/Telhado', '08': '3. Estrutura LSF/Telhado',
+        '07': '4. Vedações/Instalações', '10': '4. Vedações/Instalações', '11': '4. Vedações/Instalações', '12': '4. Vedações/Instalações',
+        '13': '5. Acabamentos/Externos', '14': '5. Acabamentos/Externos', '15': '5. Acabamentos/Externos', '16': '5. Acabamentos/Externos', '17': '5. Acabamentos/Externos'
     }
     df_macro = df.copy()
     df_macro['MACRO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
     grouped = df_macro.groupby('MACRO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
     
-    palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E', '#A0AEC0']
+    # Ordem fixa para o gráfico e Gantt
+    ordem_correta = [
+        '1. Canteiro e Gestão', '2. Fundação e Infra', '3. Estrutura LSF/Telhado', 
+        '4. Vedações/Instalações', '5. Acabamentos/Externos'
+    ]
+    grouped['MACRO'] = pd.Categorical(grouped['MACRO'], categories=ordem_correta, ordered=True)
+    grouped = grouped.sort_values('MACRO')
     
-    # Criar rosca
+    grouped['PESO'] = grouped['CUSTO_FINAL_COM_BDI'] / valor_total
+    return grouped
+
+def plot_custo_etapa(grouped, valor_total):
+    fig = plt.figure(figsize=(8, 4), facecolor=HEX_FUNDO) # Proporção perfeitamente circular
+    ax = fig.add_subplot(111)
+    
+    palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
+    
     wedges, texts, autotexts = ax.pie(
         grouped['CUSTO_FINAL_COM_BDI'], 
         labels=grouped['MACRO'], 
         autopct='%1.1f%%', 
         startangle=140, 
-        colors=palette[:len(grouped)],
-        wedgeprops=dict(width=0.4, edgecolor=HEX_FUNDO, linewidth=2),
-        textprops=dict(fontsize=8, fontweight='bold', color=HEX_TEXTO)
+        colors=palette,
+        wedgeprops=dict(width=0.45, edgecolor=HEX_FUNDO, linewidth=2),
+        textprops=dict(fontsize=9, fontweight='bold', color=HEX_TEXTO),
+        pctdistance=0.75
     )
-    plt.setp(autotexts, size=8, weight="bold", color="white")
+    plt.setp(autotexts, size=9, weight="bold", color="white")
     
     centre_circle = plt.Circle((0,0), 0.55, fc=HEX_FUNDO)
     ax.add_artist(centre_circle)
-    ax.annotate(f"Total:\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=10, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
+    ax.annotate(f"TOTAL\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=12, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
     
+    ax.axis('equal') # FORÇA A ROSCA A FICAR REDONDA!
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
@@ -125,94 +138,125 @@ def plot_custo_etapa(df, valor_total):
     buf.seek(0)
     return buf
 
-def plot_gantt(prazo_meses):
-    fig = plt.figure(figsize=(9, 2.5), facecolor=HEX_FUNDO)
-    ax = fig.add_subplot(111)
+def plot_gantt_e_curvas(grouped, prazo_meses):
+    # Lógica de peso financeiro: Etapas que custam mais, demoram mais e começam baseadas nas anteriores
+    pesos = grouped['PESO'].tolist()
     
-    macro_tasks = ['5. Acabamentos e Externos', '4. Vedações e Instalações', '3. Estrutura LSF e Telhado', '2. Fundação e Infra', '1. Gestão e Canteiro']
     m = prazo_meses
-    starts = [m*0.45, m*0.3, m*0.15, m*0.05, 0]
-    durations = [m*0.5, m*0.5, m*0.45, m*0.25, m*0.25]
+    
+    # DURAÇÃO BASEADA NO PESO FINANCEIRO (% DO CUSTO = % DO PRAZO + Margem LSF)
+    # Ex: Acabamento custa muito, barra longa. Fundação custa pouco, barra curta.
+    d1 = max(m * pesos[0] * 1.5, m * 0.2) # Canteiro
+    d2 = max(m * pesos[1] * 2.0, m * 0.2) # Fundação
+    d3 = max(m * pesos[2] * 2.0, m * 0.3) # Estrutura
+    d4 = max(m * pesos[3] * 1.8, m * 0.3) # Vedações
+    d5 = max(m * pesos[4] * 2.0, m * 0.3) # Acabamentos
+    durations = [d1, d2, d3, d4, d5]
+    
+    # START BASEADO EM SOBREPOSIÇÃO INTELIGENTE (Engenharia Simultânea LSF)
+    s1 = 0
+    s2 = s1 + (d1 * 0.3) # Fundação começa logo após início do canteiro
+    s3 = s2 + (d2 * 0.5) # Estrutura começa quando base atinge 50%
+    s4 = s3 + (d3 * 0.4) # Vedação entra quando aço está em 40%
+    s5 = s4 + (d4 * 0.6) # Acabamento espera vedações passarem de 60%
+    
+    # Ajuste fino para não estourar o prazo final
+    starts = [s1, s2, s3, s4, s5]
+    max_end = max([starts[i] + durations[i] for i in range(5)])
+    if max_end > m:
+        fator = m / max_end
+        starts = [s * fator for s in starts]
+        durations = [d * fator for s in durations]
+        
+    # Invertendo para o gráfico de baixo para cima
+    macro_tasks = grouped['MACRO'].tolist()[::-1]
+    starts = starts[::-1]
+    durations = durations[::-1]
+    
+    # --- DESENHO DO GANTT ---
+    fig_gantt = plt.figure(figsize=(9, 2.8), facecolor=HEX_FUNDO)
+    ax_gantt = fig_gantt.add_subplot(111)
     
     for i in range(5):
         rect = patches.Rectangle((starts[i], i-0.35), durations[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', linewidth=1)
-        ax.add_patch(rect)
-        ax.text(starts[i] + 0.1, i, macro_tasks[i], va='center', color='white', fontweight='bold', fontsize=9)
+        ax_gantt.add_patch(rect)
+        ax_gantt.text(starts[i] + 0.1, i, macro_tasks[i], va='center', color='white', fontweight='bold', fontsize=9)
 
-    ax.set_xlim(0, prazo_meses)
-    ax.set_ylim(-0.5, 4.5)
-    
-    ax.set_xticks(range(0, prazo_meses + 1))
-    ax.set_xticklabels([f'Mês {i}' for i in range(prazo_meses + 1)], fontsize=9, color=HEX_PRIMARIA)
-    ax.tick_params(axis='x', length=5, width=1.5, color=HEX_PRIMARIA)
-    ax.grid(axis='x', color=HEX_GRID, linestyle='-', linewidth=1, zorder=0)
-    
-    ax.set_yticks([])
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_color(HEX_PRIMARIA)
-    ax.spines['bottom'].set_linewidth(1.5)
+    ax_gantt.set_xlim(0, prazo_meses)
+    ax_gantt.set_ylim(-0.5, 4.5)
+    ax_gantt.set_xticks(range(0, prazo_meses + 1))
+    ax_gantt.set_xticklabels([f'Mês {i}' for i in range(prazo_meses + 1)], fontsize=9, color=HEX_PRIMARIA)
+    ax_gantt.tick_params(axis='x', length=5, width=1.5, color=HEX_PRIMARIA)
+    ax_gantt.grid(axis='x', color=HEX_GRID, linestyle='-', linewidth=1, zorder=0)
+    ax_gantt.set_yticks([])
+    ax_gantt.spines['top'].set_visible(False)
+    ax_gantt.spines['right'].set_visible(False)
+    ax_gantt.spines['left'].set_visible(False)
+    ax_gantt.spines['bottom'].set_color(HEX_PRIMARIA)
+    ax_gantt.spines['bottom'].set_linewidth(1.5)
 
     plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
-    plt.close(fig)
-    buf.seek(0)
-    return buf
-
-def plot_curva_s(prazo_meses):
-    fig = plt.figure(figsize=(9, 2.8), facecolor=HEX_FUNDO)
-    ax = fig.add_subplot(111)
+    buf_gantt = io.BytesIO()
+    plt.savefig(buf_gantt, format='png', dpi=300, bbox_inches='tight', facecolor=fig_gantt.get_facecolor())
+    plt.close(fig_gantt)
+    buf_gantt.seek(0)
+    
+    # --- DESENHO DA CURVA S ---
+    fig_curva = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO)
+    ax_curva = fig_curva.add_subplot(111)
     
     x_coords = np.arange(0.5, prazo_meses + 0.5)
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
     
-    # Simulação da Curva S
+    # SIMULAÇÃO DA CURVA S BASEADA NO DESLOCAMENTO DO PESO
+    # Isso empurra o pico da Gaussiana para onde a obra realmente exige recurso
+    pico_previsto = sum([starts[i] + (durations[i]/2) for i in range(5)]) / 5 # Centro de gravidade da obra
+    deslocamento = (pico_previsto / m) * 4 - 2 # Converte para o eixo gaussiano
+    
     x = np.linspace(-2.5, 2.5, prazo_meses)
-    weights = np.exp(-x**2)
+    weights = np.exp(-(x - deslocamento)**2)
     perc_mensal = (weights / weights.sum()) * 100
     perc_acum = np.cumsum(perc_mensal)
     
-    bars = ax.bar(x_coords, perc_mensal, color=HEX_SECUNDARIA, width=0.55, zorder=2)
-    ax_line = ax.twinx()
+    bars = ax_curva.bar(x_coords, perc_mensal, color=HEX_SECUNDARIA, width=0.55, zorder=2)
+    ax_line = ax_curva.twinx()
     ax_line.plot(x_coords, perc_acum, color=HEX_DESTAQUE, marker='o', linewidth=3.5, markersize=6, zorder=3)
     
     for bar in bars:
         h = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=HEX_PRIMARIA)
+        ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color=HEX_PRIMARIA)
                       
-    ax.set_xlim(0, prazo_meses)
-    ax.set_xticks(x_coords)
-    ax.set_xticklabels(meses_labels, fontsize=9, color=HEX_PRIMARIA)
-    
-    ax.set_ylim(0, max(perc_mensal) * 1.25)
-    ax.set_yticks([0, 10, 20, 30])
-    ax.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=HEX_PRIMARIA)
+    ax_curva.set_xlim(0, prazo_meses)
+    ax_curva.set_xticks(x_coords)
+    ax_curva.set_xticklabels(meses_labels, fontsize=9, color=HEX_PRIMARIA)
+    ax_curva.set_ylim(0, max(perc_mensal) * 1.25)
+    ax_curva.set_yticks([0, 10, 20, 30])
+    ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=HEX_PRIMARIA)
     
     ax_line.set_ylim(0, 110)
     ax_line.set_yticks([]) 
     
-    ax.tick_params(axis='x', length=0, labelsize=9, colors=HEX_PRIMARIA)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_color(HEX_PRIMARIA)
-    ax.spines['bottom'].set_linewidth(1.5)
+    ax_curva.tick_params(axis='x', length=0, labelsize=9, colors=HEX_PRIMARIA)
+    ax_curva.spines['top'].set_visible(False)
+    ax_curva.spines['right'].set_visible(False)
+    ax_curva.spines['left'].set_visible(False)
+    ax_curva.spines['bottom'].set_color(HEX_PRIMARIA)
+    ax_curva.spines['bottom'].set_linewidth(1.5)
     
     ax_line.spines['top'].set_visible(False)
     ax_line.spines['right'].set_visible(False)
     ax_line.spines['left'].set_visible(False)
     ax_line.spines['bottom'].set_visible(False)
     
-    ax.grid(axis='y', color=HEX_GRID, linestyle='-', linewidth=1, zorder=1)
+    ax_curva.grid(axis='y', color=HEX_GRID, linestyle='-', linewidth=1, zorder=1)
 
     plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+    buf_curva = io.BytesIO()
+    plt.savefig(buf_curva, format='png', dpi=300, bbox_inches='tight', facecolor=fig_curva.get_facecolor())
+    plt.close(fig_curva)
+    buf_curva.seek(0)
+    
+    return buf_gantt, buf_curva
 
 # FUNÇÕES DE PAGINAÇÃO DO PDF
 def primeira_pagina(canvas, doc): pass
@@ -254,7 +298,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                 new_w = new_h * aspect
             elements.append(Image("logo.png", width=new_w, height=new_h))
         except:
-            elements.append(Image("logo.png", width=2.5*inch, height=1.0*inch))
+            pass
     else:
         elements.append(Paragraph("AMÂNCIO", ParagraphStyle('LogoTxt', fontName='Helvetica-Bold', fontSize=34, textColor=COR_PRIMARIA, alignment=1)))
         elements.append(Paragraph("CONSTRUTORA INTELIGENTE", ParagraphStyle('SubLogoTxt', fontName='Helvetica-Bold', fontSize=10, textColor=COR_PRIMARIA, alignment=1, spaceAfter=15)))
@@ -272,7 +316,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.2 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V4.3 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -374,18 +418,18 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(t_detalhes)
     elements.append(PageBreak())
     
-    # --- PÁGINA 4: DASHBOARDS (3 GRÁFICOS SEPARADOS) ---
-    elements.append(Paragraph("SÍNTESE DE PREVISIBILIDADE & ANÁLISE", h1_style))
+    # --- PÁGINA 4: DASHBOARDS (COM PROPORÇÕES CORRIGIDAS) ---
+    elements.append(Paragraph("SÍNTESE DE PREVISIBILIDADE E FLUXO DE EXECUÇÃO", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
     
-    elements.append(Paragraph("6. COMPOSIÇÃO DE CUSTO POR ETAPA CONSTRUTIVA", h2_style))
-    elements.append(Image(buf_rosca, width=6.8*inch, height=2.1*inch))
+    elements.append(Paragraph("6. COMPOSIÇÃO DE CUSTO POR MACRO-ETAPAS", h2_style))
+    elements.append(Image(buf_rosca, width=5.5*inch, height=2.75*inch))
     
-    elements.append(Paragraph("7. CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA", h2_style))
-    elements.append(Image(buf_gantt, width=6.8*inch, height=1.9*inch))
+    elements.append(Paragraph("7. CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA (PONDERADO)", h2_style))
+    elements.append(Image(buf_gantt, width=6.6*inch, height=2.0*inch))
     
-    elements.append(Paragraph("8. FLUXO DE DESEMBOLSO FINANCEIRO MENSAL (CURVA S)", h2_style))
-    elements.append(Image(buf_curva, width=6.8*inch, height=2.1*inch))
+    elements.append(Paragraph("8. FLUXO DE DESEMBOLSO FINANCEIRO E CURVA S ACUMULADA", h2_style))
+    elements.append(Image(buf_curva, width=6.6*inch, height=2.3*inch))
     
     elements.append(PageBreak())
 
@@ -412,7 +456,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
             if not df_filtro.empty:
                 texto_explicativo = str(df_filtro.iloc[0][col_desc])
                 if pd.isna(texto_explicativo) or texto_explicativo == "nan": 
-                    texto_explicativo = "Etapa do projeto construtivo."
+                    texto_explicativo = "Etapa construtiva."
                 
                 tabela_memorial = []
                 tabela_memorial.append(Paragraph(sub_full, h3_style))
@@ -488,10 +532,10 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.2)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V4.3)", use_container_width=True)
 
 if submitted:
-    with st.spinner("Sincronizando com o Google Sheets e gerando Dossiê..."):
+    with st.spinner("Sincronizando com o Google Sheets e processando PDF..."):
         df_val, status_val = carregar_valores_sheets()
         df_mem, status_mem = carregar_memorial_sheets()
         
@@ -522,23 +566,25 @@ if submitted:
         valor_total = df_val["CUSTO_FINAL_COM_BDI"].sum()
         valor_m2 = valor_total / area_m2
         
-        # DASHBOARDS SEPARADOS
-        buf_rosca = plot_custo_etapa(df_val, valor_total)
-        buf_gantt = plot_gantt(prazo_meses)
-        buf_curva = plot_curva_s(prazo_meses)
+        # 1. Agrupar dados
+        grouped = processar_macro_etapas(df_val, valor_total)
         
-        # GERAR DOSSIÊ PDF
+        # 2. Dashboards Independentes
+        buf_rosca = plot_custo_etapa(grouped, valor_total)
+        buf_gantt, buf_curva = plot_gantt_e_curvas(grouped, prazo_meses)
+        
+        # 3. Gerar PDF
         pdf_bytes = gerar_dossie_pdf_bytes(
             cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
             padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V4.2 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL V4.3 GERADO COM SUCESSO!")
         
         st.download_button(
             label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO)",
             data=pdf_bytes,
-            file_name=f"DOSSIE_AMANCIO_V4.2_{cliente.replace(' ', '_').upper()}.pdf",
+            file_name=f"DOSSIE_AMANCIO_V4.3_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
