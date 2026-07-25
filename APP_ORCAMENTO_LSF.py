@@ -126,7 +126,7 @@ def gerar_grafico_distribuicao(df, valor_total, tot_mat, tot_mo):
     return buf
 
 def gerar_dashboard_notebooklm_sintese(prazo_meses):
-    """Gera o painel Síntese de Previsibilidade com Gantt, Curva S e Texto Narrativo"""
+    """Gera o painel Síntese de Previsibilidade com eixos perfeitamente alinhados e numéricos"""
     c_primary = '#1C3144'    
     c_accent = '#F29F05'     
     c_bar = '#4A7B9D'        
@@ -168,7 +168,7 @@ def gerar_dashboard_notebooklm_sintese(prazo_meses):
     ax_gantt.spines['bottom'].set_color(c_primary)
     ax_gantt.spines['bottom'].set_linewidth(1.5)
 
-    # Highlight (Orange Box)
+    # Highlight (Orange Box no Gantt)
     box_x = starts[0]
     box_w = durations[0]
     rect_hl = patches.Rectangle((box_x, -0.6), box_w, 1.2, fill=True, facecolor=c_bg, edgecolor=c_accent, linewidth=2, alpha=0.9, zorder=3)
@@ -177,32 +177,39 @@ def gerar_dashboard_notebooklm_sintese(prazo_meses):
     ax_gantt.text(box_x + 0.2, -0.15, f"O método LSF permite a execução simultânea de fases,\ncomprimindo o cronograma para exatos {prazo_meses} meses.", 
                   color=c_primary, fontsize=7.5, zorder=4)
 
-    # --- BOTTOM LEFT: S-CURVE & BARS ---
+    # --- BOTTOM LEFT: S-CURVE & BARS (EIXOS NUMÉRICOS ALINHADOS) ---
     ax_curva = fig.add_subplot(gs[1, 0])
     ax_curva.set_facecolor(c_bg)
     
+    x_coords = np.arange(0.5, prazo_meses + 0.5)
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
+    
     x = np.linspace(-2.5, 2.5, prazo_meses)
     weights = np.exp(-x**2)
     perc_mensal = (weights / weights.sum()) * 100
     perc_acum = np.cumsum(perc_mensal)
     
-    # Peak highlight
-    peak_idx = np.argmax(perc_mensal)
-    ax_curva.axvspan(peak_idx - 0.5, peak_idx + 0.5, color=c_accent, alpha=0.3, zorder=0)
-    con = patches.ConnectionPatch(xyA=(peak_idx, 4.5), xyB=(peak_idx, 0), coordsA="data", coordsB="data",
-                                  axesA=ax_gantt, axesB=ax_curva, color=c_accent, alpha=0.3, lw=40)
-    ax_curva.add_artist(con)
+    # Identificar o pico
+    peak_idx = int(np.argmax(perc_mensal))
+    peak_x = x_coords[peak_idx]
     
-    bars = ax_curva.bar(meses_labels, perc_mensal, color=c_bar, width=0.55, zorder=2)
+    # Destacar a faixa do pico em ambos os eixos
+    ax_curva.axvspan(peak_x - 0.38, peak_x + 0.38, color=c_accent, alpha=0.25, zorder=0)
+    ax_gantt.axvspan(peak_x - 0.38, peak_x + 0.38, color=c_accent, alpha=0.15, zorder=0)
+    
+    bars = ax_curva.bar(x_coords, perc_mensal, color=c_bar, width=0.55, zorder=2)
     ax_curva_line = ax_curva.twinx()
-    ax_curva_line.plot(meses_labels, perc_acum, color=c_accent, linewidth=3.5, zorder=3)
+    ax_curva_line.plot(x_coords, perc_acum, color=c_accent, linewidth=3.5, zorder=3)
     
     for i, bar in enumerate(bars):
         h = bar.get_height()
-        ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold', color='white', 
+        ax_curva.text(bar.get_x() + bar.get_width()/2, h + 0.5, f'{h:.1f}%', ha='center', va='bottom', fontsize=8.5, fontweight='bold', color='white', 
                       bbox=dict(facecolor=c_bar, edgecolor='none', pad=1.5), zorder=4)
                       
+    ax_curva.set_xlim(0, prazo_meses)
+    ax_curva.set_xticks(x_coords)
+    ax_curva.set_xticklabels(meses_labels, fontsize=9, color=c_primary)
+    
     ax_curva.set_ylim(0, max(perc_mensal) * 1.25)
     ax_curva.set_yticks([0, 10, 20, 30])
     ax_curva.set_yticklabels(['0%', '10%', '20%', '30%'], fontsize=9, color=c_primary)
@@ -216,10 +223,12 @@ def gerar_dashboard_notebooklm_sintese(prazo_meses):
     ax_curva.spines['left'].set_visible(False)
     ax_curva.spines['bottom'].set_color(c_primary)
     ax_curva.spines['bottom'].set_linewidth(1.5)
+    
     ax_curva_line.spines['top'].set_visible(False)
     ax_curva_line.spines['right'].set_visible(False)
     ax_curva_line.spines['left'].set_visible(False)
     ax_curva_line.spines['bottom'].set_visible(False)
+    
     ax_curva.grid(axis='y', color=c_grid, linestyle='-', linewidth=1, zorder=1)
 
     # --- RIGHT SIDE: NARRATIVE TEXT BOX ---
@@ -237,8 +246,8 @@ def gerar_dashboard_notebooklm_sintese(prazo_meses):
     text_content += "A Estrutura LSF e Telhado está\nem fase de finalização, as\nVedações e Instalações estão a\ntodo vapor, e os Acabamentos\nacabam de iniciar.\n\n"
     text_content += "O aporte financeiro espelha com\nprecisão cirúrgica a realidade\nda execução física simultânea."
     
-    ax_text.text(0.08, 0.85, f"Por que {peak_val:.1f}% no Mês {peak_month}?", fontsize=14, fontweight='bold', color=c_primary, transform=ax_text.transAxes)
-    ax_text.text(0.08, 0.15, text_content, fontsize=11, color=c_primary, linespacing=1.6, transform=ax_text.transAxes)
+    ax_text.text(0.08, 0.85, f"Por que {peak_val:.1f}% no Mês {peak_month}?", fontsize=13, fontweight='bold', color=c_primary, transform=ax_text.transAxes)
+    ax_text.text(0.08, 0.15, text_content, fontsize=10.5, color=c_primary, linespacing=1.5, transform=ax_text.transAxes)
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
