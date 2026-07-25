@@ -76,11 +76,12 @@ if 'escopo_status' not in st.session_state:
 def att_status(val):
     st.session_state.escopo_status = [val] * n_itens
 
+# CORREÇÃO: RETORNAR APENAS O PATH (STRING) OU O BYTESIO CRU, E NÃO O IMAGEREADER DIRETAMENTE
 def card_etapa(prefix):
     for ext in ['.jpg', '.png']:
         if os.path.exists(f"img_{prefix}{ext}"):
-            try: return ImageReader(f"img_{prefix}{ext}")
-            except: pass
+            return f"img_{prefix}{ext}"  # Retorna a string do caminho do arquivo
+
     fig, ax = plt.subplots(figsize=(4.5, 3.2), facecolor='#0F2C3D')
     ax.axis('off')
     if prefix in ['01', '02', '03', '04']: ax.text(0.5, 0.5, "CANTEIRO E GESTÃO", color='white', ha='center')
@@ -92,7 +93,7 @@ def card_etapa(prefix):
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='#0F2C3D')
     plt.close(fig); buf.seek(0)
-    return ImageReader(buf)
+    return buf # Retorna o arquivo em bytes cru
 
 def agrupar_macro(df, col_val):
     m_map = {'01':'1. Canteiro', '02':'1. Canteiro', '03':'1. Canteiro', '04':'1. Canteiro', '05':'2. Fundação', '09':'2. Fundação', '06':'3. Estrutura/Telhado', '08':'3. Estrutura/Telhado', '07':'4. Instalações/Vedação', '10':'4. Instalações/Vedação', '11':'4. Instalações/Vedação', '12':'4. Instalações/Vedação'}
@@ -156,7 +157,6 @@ def pdf_b(cli, loc, am2, af2, tf, pdr, df, df_m, v_mer, v_con, tm_c, tmo_c, m, e
     # 2. PROPOSTA FINANCEIRA (COM NOTA)
     elem.append(Paragraph("RESUMO FINANCEIRO E ESCOPO", h1))
     
-    # NOTA DE RESSALVA
     aviso = "<font color='white'><b>NOTA TÉCNICA/COMERCIAL (ESTIMATIVA INICIAL)</b><br/>Este documento é um balizamento estimado baseado em parâmetros de mercado. Valores definitivos exigem aprovação dos Projetos Executivos. Os itens identificados como 'NÃO INCLUSOS' no contrato servem para programação financeira do cliente e não fazem parte da nossa responsabilidade.</font>"
     t_aviso = Table([[Paragraph(aviso, b_b)]], colWidths=[450]); t_aviso.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#C53030')), ('PADDING', (0,0), (-1,-1), 6)]))
     elem.append(t_aviso); elem.append(Spacer(1, 15))
@@ -183,7 +183,7 @@ def pdf_b(cli, loc, am2, af2, tf, pdr, df, df_m, v_mer, v_con, tm_c, tmo_c, m, e
     elem.append(Paragraph("DASHBOARDS: VISÃO DO SEU CONTRATO AMÂNCIO", h1))
     elem.append(Image(g_c[0], width=5*inch, height=2.5*inch)); elem.append(Image(g_c[1], width=6*inch, height=1.7*inch)); elem.append(Image(g_c[2], width=6*inch, height=1.9*inch)); elem.append(PageBreak())
     
-    # 4. MEMORIAL
+    # 4. MEMORIAL (CUIDADO COM A IMAGEM AQUI)
     elem.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL", h1))
     if df_m.empty: elem.append(Paragraph("Sem itens de memorial.", b_n))
     else:
@@ -192,6 +192,7 @@ def pdf_b(cli, loc, am2, af2, tf, pdr, df, df_m, v_mer, v_con, tm_c, tmo_c, m, e
         for i, r in df.iterrows():
             pref = str(r["SUBSISTEMA"])[:2]; f = df_m[df_m['CODIGO'] == pref]
             if not f.empty:
+                # O ReportLab agora recebe o Path(string) ou BytesIO limpo com segurança
                 img_f = Image(card_etapa(pref), width=2.0*inch, height=1.4*inch)
                 md = [[Paragraph("<b>ITEM</b>", b_b), Paragraph("<b>OBSERVAÇÃO</b>", b_b)]]
                 for _, ir in f.iterrows():
