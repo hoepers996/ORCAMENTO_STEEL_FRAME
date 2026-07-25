@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. CONFIGURAÇÕES GERAIS E CORES
 # ==========================================
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V7.2", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V8.0", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -33,7 +33,7 @@ URL_VALORES = "https://docs.google.com/spreadsheets/d/1kA4NHJ8VU3eDnipJ0ADArTWzm
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
 # ==========================================
-# 2. CARREGAMENTO DE DADOS (DB ABSOLUTO)
+# 2. CARREGAMENTO DE DADOS
 # ==========================================
 @st.cache_data(ttl=15)
 def carregar_valores():
@@ -85,7 +85,7 @@ def att_status(val):
     st.session_state.escopo_status = [val] * n_itens
 
 # ==========================================
-# 3. MOTORES DE GRÁFICOS E TABELAS
+# 3. MOTORES DE GRÁFICOS E CRONOGRAMA
 # ==========================================
 def card_etapa(prefix):
     for ext in ['.jpg', '.png']:
@@ -118,52 +118,60 @@ def plot_rosca(g, val_tot):
     plt.tight_layout()
     buf = io.BytesIO(); plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
-def calcular_linha_do_tempo(m, g, dur_base, inic_rel):
-    dur = [m * dur_base[i] if g.iloc[i,1] > 0 else 0 for i in range(5)]
+def calcular_linha_do_tempo(g, dur_w, inic_w):
+    """ Calcula o início e fim baseado nas semanas informadas (Bottom-Up) """
+    dur = [dur_w[i] if g.iloc[i,1] > 0 else 0 for i in range(5)]
     starts = [0] * 5
     for i in range(1, 5):
         if dur[i] > 0:
             ant = i - 1
-            while ant >= 0 and dur[ant] == 0: ant -= 1 
-            starts[i] = starts[ant] + (dur[ant] * inic_rel[i]) if ant >= 0 else 0
-    max_e = max([starts[i]+dur[i] for i in range(5)]) if sum(dur) > 0 else 0
-    if max_e > m: 
-        fator = m / max_e
-        starts = [s * fator for s in starts]
-        dur = [d * fator for d in dur]
-    return starts, dur, max_e
+            while ant >= 0 and dur[ant] == 0: ant -= 1 # Pula etapas excluídas do contrato
+            starts[i] = starts[ant] + inic_w[i] if ant >= 0 else 0
+            
+    max_w = max([starts[i]+dur[i] for i in range(5)]) if sum(dur) > 0 else 0
+    
+    # Converte Semanas para Meses para plotagem dos gráficos (1 mês = 4 semanas comerciais)
+    starts_m = [s / 4.0 for s in starts]
+    dur_m = [d / 4.0 for d in dur]
+    max_m = max_w / 4.0
+    
+    return starts_m, dur_m, max_m
 
-def plot_gantt(g, m, val_tot, dur_base, inic_rel):
-    starts, dur, max_e = calcular_linha_do_tempo(m, g, dur_base, inic_rel)
+def plot_gantt(g, m_prazo, val_tot, dur_semanas, inic_semanas):
+    starts_m, dur_m, _ = calcular_linha_do_tempo(g, dur_semanas, inic_semanas)
     fig_g = plt.figure(figsize=(9, 2.5), facecolor=HEX_FUNDO); ax_g = fig_g.add_subplot(111)
-    if max_e == 0: 
+    
+    if val_tot == 0: 
         ax_g.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_g.axis('off')
     else:
         for i in range(5):
-            if dur[i] > 0:
-                ax_g.add_patch(patches.Rectangle((starts[i], 5-i-1), dur[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', lw=1))
-                ax_g.text(starts[i]+0.1, 5-i-0.65, g['MACRO'].tolist()[i], color='white', fontsize=8, fontweight='bold')
-        ax_g.set_xlim(0, m); ax_g.set_ylim(-0.5, 5); ax_g.set_xticks(range(0, m+1)); ax_g.set_xticklabels([f'Mês {i}' for i in range(m+1)], color=HEX_PRIMARIA, fontsize=9)
+            if dur_m[i] > 0:
+                ax_g.add_patch(patches.Rectangle((starts_m[i], 5-i-1), dur_m[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', lw=1))
+                ax_g.text(starts_m[i]+0.1, 5-i-0.65, g['MACRO'].tolist()[i], color='white', fontsize=8, fontweight='bold')
+        
+        ax_g.set_xlim(0, m_prazo); ax_g.set_ylim(-0.5, 5); ax_g.set_xticks(range(0, m_prazo+1)); ax_g.set_xticklabels([f'Mês {i}' for i in range(m_prazo+1)], color=HEX_PRIMARIA, fontsize=9)
         ax_g.grid(axis='x', alpha=0.3); ax_g.set_yticks([])
         ax_g.spines['top'].set_visible(False); ax_g.spines['right'].set_visible(False); ax_g.spines['left'].set_visible(False); ax_g.spines['bottom'].set_color(HEX_PRIMARIA)
+    
     plt.tight_layout()
     buf_g = io.BytesIO(); plt.savefig(buf_g, format='png', dpi=200, bbox_inches='tight', facecolor=HEX_FUNDO); plt.close(); buf_g.seek(0); return buf_g
 
-def plot_curva_s(g, m, val_tot, dur_base, inic_rel):
-    starts, dur, max_e = calcular_linha_do_tempo(m, g, dur_base, inic_rel)
+def plot_curva_s(g, m_prazo, val_tot, dur_semanas, inic_semanas):
+    starts_m, dur_m, _ = calcular_linha_do_tempo(g, dur_semanas, inic_semanas)
     fig_c = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO); ax_c = fig_c.add_subplot(111)
-    if max_e == 0: 
+    
+    if val_tot == 0: 
         ax_c.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_c.axis('off')
     else:
-        x_c = np.arange(0.5, m+0.5)
+        x_c = np.arange(0.5, m_prazo+0.5)
         somas = 0
         for i in range(5):
-            if dur[i] > 0: somas += (starts[i] + (dur[i]/2))
-        qtd_validos = sum(1 for d in dur if d > 0)
-        pico_previsto = (somas / qtd_validos) if qtd_validos > 0 else m/2
+            if dur_m[i] > 0: somas += (starts_m[i] + (dur_m[i]/2))
+        qtd_validos = sum(1 for d in dur_m if d > 0)
+        pico_previsto = (somas / qtd_validos) if qtd_validos > 0 else m_prazo/2
         
-        x = np.linspace(-2.5, 2.5, m)
-        w = np.exp(-(x - ((pico_previsto/m)*4-2))**2)
+        x = np.linspace(-2.5, 2.5, m_prazo)
+        w = np.exp(-(x - ((pico_previsto/m_prazo)*4-2))**2)
         p_mensal = (w/w.sum()) * 100
         v_mensal = (w/w.sum()) * val_tot 
         p_acum = np.cumsum(p_mensal)
@@ -176,7 +184,7 @@ def plot_curva_s(g, m, val_tot, dur_base, inic_rel):
             txt = f'R$ {val/1000:,.1f}k'.replace('.', ',')
             ax_c.text(bar.get_x() + bar.get_width()/2, h + 1, txt, ha='center', va='bottom', fontsize=8, fontweight='bold', color=HEX_PRIMARIA)
             
-        ax_c.set_xlim(0, m); ax_c.set_xticks(x_c); ax_c.set_xticklabels([f'Mês {i+1}' for i in range(m)], color=HEX_PRIMARIA)
+        ax_c.set_xlim(0, m_prazo); ax_c.set_xticks(x_c); ax_c.set_xticklabels([f'Mês {i+1}' for i in range(m_prazo)], color=HEX_PRIMARIA)
         ax_c.set_ylim(0, max(p_mensal)*1.3); ax_l.set_ylim(0, 110); ax_l.set_yticks([])
         ax_c.spines['top'].set_visible(False); ax_c.spines['right'].set_visible(False); ax_c.spines['left'].set_visible(False); ax_c.spines['bottom'].set_color(HEX_PRIMARIA)
         ax_l.spines['top'].set_visible(False); ax_l.spines['right'].set_visible(False); ax_l.spines['left'].set_visible(False); ax_l.spines['bottom'].set_visible(False)
@@ -185,9 +193,9 @@ def plot_curva_s(g, m, val_tot, dur_base, inic_rel):
     buf_c = io.BytesIO(); plt.savefig(buf_c, format='png', dpi=200, bbox_inches='tight', facecolor=HEX_FUNDO); plt.close(); buf_c.seek(0); return buf_c
 
 # ==========================================
-# 4. GERADOR DE PDF ORDENADO
+# 4. GERADOR DE PDF
 # ==========================================
-def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m, exibir_graficos):
+def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m, exibir_graficos):
     buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
     styles = getSampleStyleSheet(); elem = []
     
@@ -213,7 +221,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
     elem.append(Paragraph("PROPOSTA COMERCIAL PARAMETRIZADA", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=18, textColor=COR_PRIMARIA, alignment=1, spaceAfter=5)))
     elem.append(Paragraph("ENGENHARIA E EDIFICAÇÕES EM LIGHT STEEL FRAME", ParagraphStyle('ST', fontName='Helvetica-Bold', fontSize=11, textColor=COR_DESTAQUE, alignment=1, spaceAfter=25)))
     
-    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V7.2 — DOSSIÊ DE ENGENHARIA", b_n)]]
+    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES ({sem_prazo} Semanas)", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V8.0 — DOSSIÊ DE ENGENHARIA", b_n)]]
     tc = Table(d_capa, colWidths=[150, 300]); tc.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')), ('PADDING', (0,0), (-1,-1), 6)]))
     elem.append(tc); elem.append(Spacer(1, 30)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_PRIMARIA, spaceAfter=8)); elem.append(Paragraph("AMÂNCIO CONSTRUTORA INTELIGENTE", ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7.5, textColor=COR_PRIMARIA, alignment=1))); elem.append(PageBreak())
     
@@ -253,7 +261,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
         elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO FINANCEIRO</b>", b_n))
         elem.append(Image(gm_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
-    # --- EAP 02: CONTRATO (FILTRADO) ---
+    # --- EAP 02: CONTRATO ---
     elem.append(Paragraph("EAP 02: O SEU CONTRATO AMÂNCIO (FILTRADO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
     elem.append(Paragraph("<i>Detalhamento exclusivo dos itens aprovados e selecionados para o escopo da construtora.</i>", b_n)); elem.append(Spacer(1,5))
     d_tab_c = [[Paragraph("<b>ITEM INCLUSO</b>", b_w), Paragraph("<b>MATERIAIS</b>", b_w), Paragraph("<b>MÃO DE OBRA</b>", b_w), Paragraph("<b>TOTAL ITEM</b>", b_w)]]
@@ -302,19 +310,17 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
 # ==========================================
 with st.sidebar:
     st.write("### AMÂNCIO")
-    st.success("Motor de Banco de Dados Ativo")
-    st.info("Conectado à Planilha V6.4")
+    st.success("Motor Bottom-Up Ativo")
 
 st.write("### 📝 DADOS GERAIS DO PROJETO")
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 cliente = col1.text_input("NOME DO CLIENTE / PROJETO:", value="RESIDENCIAL SILVA")
 local = col2.text_input("LOCAL DA OBRA (CIDADE / UF):", value="JOINVILLE / SC")
-
-col3, col4, col5, col6 = st.columns(4)
 area_m2 = col3.number_input("ÁREA CONSTRUÍDA (M²):", value=500.0, step=10.0)
+
+col4, col5 = st.columns(2)
 area_fundacao_m2 = col4.number_input("ÁREA FUNDAÇÃO (M²):", value=250.0, step=10.0)
 area_cobertura_m2 = col5.number_input("ÁREA COBERTURA (M²):", value=300.0, step=10.0)
-prazo_meses = col6.slider("PRAZO OBRA (MESES):", 3, 12, 6)
 
 st.write("---")
 st.write("### 🎛️ ENGENHARIA PARAMÉTRICA (BANCO DE DADOS)")
@@ -329,7 +335,7 @@ with c_cat2:
 map_niv = {"Leve / Básica": "BAIXO", "Moderada / Padrão": "MEDIO", "Pesada / Complexa": "ALTO"}
 
 st.write("---")
-st.write("### 🤝 ESCOPO DE CONTRATO (ITENS FORNECIDOS PELA AMÂNCIO)")
+st.write("### 🤝 ESCOPO DE CONTRATO (ITENS FORNECIDOS)")
 
 df_base = carregar_valores(); n_itens = len(df_base)
 
@@ -344,49 +350,43 @@ df_ed = st.data_editor(df_opcoes, hide_index=True, use_container_width=True, col
 st.session_state.escopo_status = df_ed["STATUS DO CONTRATO"].tolist()
 
 st.write("---")
-st.write("### 📊 CONFIGURAÇÃO DE DASHBOARDS E CRONOGRAMA")
+st.write("### ⏱️ CRONOGRAMA DA OBRA (EM SEMANAS)")
+st.info("Defina a duração e a sequência das etapas em semanas. O prazo total da obra será calculado matematicamente.")
 
-exibir_graficos = st.checkbox("Incluir Dashboards e Cronogramas (Gantt/Curva S) no Dossiê", value=True)
+c_cron1, c_cron2 = st.columns(2)
+with c_cron1:
+    st.markdown("**1. Canteiro e Gestão**")
+    d1 = st.number_input("Duração (Semanas)", 1, 50, 4, key="d1")
+    
+    st.markdown("**2. Fundação e Infraestrutura**")
+    d2 = st.number_input("Duração (Semanas)", 1, 50, 6, key="d2")
+    i2 = st.number_input("Semanas após INÍCIO do Canteiro", 0, 50, 2, key="i2")
+    
+    st.markdown("**3. Estrutura LSF e Telhado**")
+    d3 = st.number_input("Duração (Semanas)", 1, 50, 8, key="d3")
+    i3 = st.number_input("Semanas após INÍCIO da Fundação", 0, 50, 4, key="i3")
 
-# Arrays padrão para cálculo
-dur_base = [0.10, 0.15, 0.35, 0.40, 0.35]
-inic_rel = [0.0, 0.50, 0.80, 0.30, 0.60]
+with c_cron2:
+    st.markdown("**4. Instalações e Vedações**")
+    d4 = st.number_input("Duração (Semanas)", 1, 50, 10, key="d4")
+    i4 = st.number_input("Semanas após INÍCIO da Estrutura", 0, 50, 4, key="i4")
+    
+    st.markdown("**5. Acabamentos**")
+    d5 = st.number_input("Duração (Semanas)", 1, 50, 12, key="d5")
+    i5 = st.number_input("Semanas após INÍCIO das Instalações", 0, 50, 6, key="i5")
+    
+dur_semanas = [d1, d2, d3, d4, d5]
+inic_semanas = [0, i2, i3, i4, i5]
 
-if exibir_graficos:
-    with st.expander("⚙️ Ajuste Fino do Cronograma (Duração e Sequência)"):
-        st.write("Defina o tempo de cada macro-etapa (% do Prazo Total) e quando ela começa (% de conclusão da etapa anterior).")
-        
-        # CANTEIRO
-        st.markdown("**1. Canteiro e Gestão**")
-        d1 = st.slider("Duração (% do Prazo)", 5, 100, 10, key="d1")
-        
-        # FUNDAÇÃO
-        st.markdown("**2. Fundação e Infraestrutura**")
-        c2_1, c2_2 = st.columns(2)
-        d2 = c2_1.slider("Duração (% do Prazo)", 5, 100, 15, key="d2")
-        i2 = c2_2.slider("Iniciar após % do Canteiro", 0, 100, 50, key="i2")
-        
-        # ESTRUTURA
-        st.markdown("**3. Estrutura LSF e Telhado**")
-        c3_1, c3_2 = st.columns(2)
-        d3 = c3_1.slider("Duração (% do Prazo)", 5, 100, 35, key="d3")
-        i3 = c3_2.slider("Iniciar após % da Fundação", 0, 100, 80, key="i3")
-        
-        # INSTALAÇÕES
-        st.markdown("**4. Instalações e Vedações**")
-        c4_1, c4_2 = st.columns(2)
-        d4 = c4_1.slider("Duração (% do Prazo)", 5, 100, 40, key="d4")
-        i4 = c4_2.slider("Iniciar após % da Estrutura", 0, 100, 30, key="i4")
-        
-        # ACABAMENTOS
-        st.markdown("**5. Acabamentos**")
-        c5_1, c5_2 = st.columns(2)
-        d5 = c5_1.slider("Duração (% do Prazo)", 5, 100, 35, key="d5")
-        i5 = c5_2.slider("Iniciar após % das Instalações", 0, 100, 60, key="i5")
-        
-        # Atualiza os arrays de cálculo
-        dur_base = [d1/100.0, d2/100.0, d3/100.0, d4/100.0, d5/100.0]
-        inic_rel = [0.0, i2/100.0, i3/100.0, i4/100.0, i5/100.0]
+# Calcula prazo global na hora para mostrar pro usuário
+starts_w = [0]*5
+for i in range(1, 5): starts_w[i] = starts_w[i-1] + inic_semanas[i]
+max_w = max([starts_w[i] + dur_semanas[i] for i in range(5)])
+prazo_meses_global = int(np.ceil(max_w / 4.0))
+
+st.success(f"⏱️ PRAZO TOTAL CALCULADO: **{max_w} semanas** (Aprox. **{prazo_meses_global} meses**)")
+
+exibir_graficos = st.checkbox("Incluir Dashboards e Cronogramas no Dossiê", value=True)
 
 st.write("---")
 bdi = st.slider("MARGEM BDI (%):", 10, 35, 20) / 100.0
@@ -423,27 +423,23 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
         df_val["CUSTO_MERCADO"] = c_merc; df_val["MAT_CONTRATO"] = mt_c; df_val["MO_CONTRATO"] = mo_c; df_val["CUSTO_CONTRATO"] = c_cont
         
         v_mer = sum(c_merc); v_con = sum(c_cont)
-        
-        gm = agrupar_macro(df_val, 'CUSTO_MERCADO')
-        gc = agrupar_macro(df_val, 'CUSTO_CONTRATO')
-        
+        gm = agrupar_macro(df_val, 'CUSTO_MERCADO'); gc = agrupar_macro(df_val, 'CUSTO_CONTRATO')
         txt_map = {"BAIXO": "BÁSICA", "MEDIO": "PADRÃO", "ALTO": "COMPLEXA/LUXO"}
         cf = {'fund': txt_map[nv_fund], 'estr': txt_map[nv_estr], 'inst': txt_map[nv_inst], 'acab': txt_map[nv_acab]}
         
-        # Se os gráficos estiverem ligados, gera eles, se não, envia None
         if exibir_graficos:
             buf_gm_r = plot_rosca(gm, v_mer)
-            buf_gm_g = plot_gantt(gm, prazo_meses, v_mer, dur_base, inic_rel)
-            buf_gm_c = plot_curva_s(gm, prazo_meses, v_mer, dur_base, inic_rel)
+            buf_gm_g = plot_gantt(gm, prazo_meses_global, v_mer, dur_semanas, inic_semanas)
+            buf_gm_c = plot_curva_s(gm, prazo_meses_global, v_mer, dur_semanas, inic_semanas)
             
             buf_gc_r = plot_rosca(gc, v_con)
-            buf_gc_g = plot_gantt(gc, prazo_meses, v_con, dur_base, inic_rel)
-            buf_gc_c = plot_curva_s(gc, prazo_meses, v_con, dur_base, inic_rel)
+            buf_gc_g = plot_gantt(gc, prazo_meses_global, v_con, dur_semanas, inic_semanas)
+            buf_gc_c = plot_curva_s(gc, prazo_meses_global, v_con, dur_semanas, inic_semanas)
         else:
             buf_gm_r, buf_gm_g, buf_gm_c = None, None, None
             buf_gc_r, buf_gc_g, buf_gc_c = None, None, None
         
-        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos)
+        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses_global, max_w, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos)
         
         st.success("✅ DOSSIÊ DUPLO GERADO COM SUCESSO!")
-        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V7.2)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V8.0)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
