@@ -7,13 +7,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.units import inch
 import io
-import base64
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V1.7", page_icon="🏗️", layout="centered")
+st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V1.7.1", page_icon="🏗️", layout="centered")
 
 st.title("🏗️ GERADOR DE ORÇAMENTOS - STEEL FRAME")
-st.subheader("ESTIMATIVA PARAMÉTRICA V1.7 (COM PRÉ-VISUALIZAÇÃO DE PDF)")
+st.subheader("ESTIMATIVA PARAMÉTRICA V1.7.1 (PRÉ-VISUALIZAÇÃO NATIVA)")
 
 st.markdown("---")
 
@@ -77,7 +76,7 @@ def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, pa
     
     elements = []
     elements.append(Paragraph("PROPOSTA COMERCIAL PRELIMINAR — LIGHT STEEL FRAME", title_style))
-    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V1.7)", subtitle_style))
+    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V1.7.1)", subtitle_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=12))
     
     dados_cliente = [
@@ -201,7 +200,7 @@ with st.form("form_orcamento"):
     
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA (V1.7)")
+    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA")
 
 if submitted:
     st.success("✅ CÁLCULOS EXECUTADOS COM SUCESSO!")
@@ -244,6 +243,7 @@ if submitted:
     tot_mat_geral = df["CUSTO_MAT_FINAL"].sum()
     tot_mo_geral = df["CUSTO_MO_FINAL"].sum()
     
+    # METRICAS NO PAINEL
     if exibir_separado:
         c1, c2, c3 = st.columns(3)
         c1.metric("VALOR TOTAL ESTIMADO", f"R$ {valor_total:,.2f}")
@@ -258,18 +258,46 @@ if submitted:
     
     pdf_bytes = gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], padrao, bdi, df, valor_total, valor_m2, exibir_separado)
     
-    # GERAR CODIFICAÇÃO BASE64 PARA PREVIEW NO NAVEGADOR
-    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="700" type="application/pdf"></iframe>'
-
     # BOTÃO DE DOWNLOAD
     st.download_button(
-        label="📥 BAIXAR PROPOSTA COMERCIAL V1.7 EM PDF",
+        label="📥 BAIXAR PROPOSTA COMERCIAL EM PDF",
         data=pdf_bytes,
-        file_name=f"PROPOSTA_V1_7_{cliente.replace(' ', '_').upper()}.pdf",
+        file_name=f"PROPOSTA_{cliente.replace(' ', '_').upper()}.pdf",
         mime="application/pdf"
     )
 
-    # ABA EXPANDÍVEL DE PRÉ-VISUALIZAÇÃO NA TELA
-    with st.expander("👁️ CLIQUE AQUI PARA VISUALIZAR A PROPOSTA NA TELA (PRÉ-VISUALIZAÇÃO)"):
-        st.markdown(pdf_display, unsafe_allow_html=True)
+    # PRÉ-VISUALIZAÇÃO NATIVA SEM BLOQUEIO DE NAVEGADOR
+    with st.expander("👁️ CLIQUE AQUI PARA PRÉ-VISUALIZAR A PROPOSTA NA TELA"):
+        st.markdown(f"### 📄 PROPOSTA COMERCIAL — {cliente.upper()}")
+        st.markdown(f"**Local:** {local} | **Área Total:** {area_m2:,.2f} m² | **Padrão:** {padrao}")
+        st.markdown(f"**Fundação:** {area_fundacao_m2:,.2f} m² ({tipo_fundacao.split(' ')[0]})")
+        
+        st.info(f"💰 **VALOR TOTAL DO PROJETO:** R$ {valor_total:,.2f} (R$ {valor_m2:,.2f} / m²)")
+        
+        st.markdown("#### 📊 Detalhamento dos Subsistemas (EAP)")
+        
+        if exibir_separado:
+            df_preview = df[["SUBSISTEMA", "CUSTO_MAT_FINAL", "CUSTO_MO_FINAL", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
+            df_preview.columns = ["Subsistema", "Material (R$)", "Mão de Obra (R$)", "Total com BDI (R$)", "Part. (%)"]
+            st.dataframe(df_preview.style.format({
+                "Material (R$)": "R$ {:,.2f}",
+                "Mão de Obra (R$)": "R$ {:,.2f}",
+                "Total com BDI (R$)": "R$ {:,.2f}",
+                "Part. (%)": "{:.1f}%"
+            }), use_container_width=True)
+        else:
+            df_preview = df[["SUBSISTEMA", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
+            df_preview.columns = ["Subsistema", "Valor com BDI (R$)", "Part. (%)"]
+            st.dataframe(df_preview.style.format({
+                "Valor com BDI (R$)": "R$ {:,.2f}",
+                "Part. (%)": "{:.1f}%"
+            }), use_container_width=True)
+            
+        st.markdown("#### 📈 Distribuição Visual dos Custos")
+        fig_preview, ax_prev = plt.subplots(figsize=(7, 3.5))
+        sub_names = [str(x)[:22] for x in df["SUBSISTEMA"].tolist()]
+        values = df["PARTICIPACAO_PCT"].tolist()
+        ax_prev.barh(sub_names[::-1], values[::-1], color='#2B6CB0')
+        ax_prev.set_xlabel('Participação (%)', fontsize=8, fontweight='bold')
+        plt.tight_layout()
+        st.pyplot(fig_preview)
