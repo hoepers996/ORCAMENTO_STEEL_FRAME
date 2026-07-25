@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. CONFIGURAÇÕES GERAIS E CORES
 # ==========================================
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V7.1", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V7.2", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -78,7 +78,6 @@ def carregar_memorial():
 df_base = carregar_valores()
 n_itens = len(df_base)
 
-# ESTADO DO ESCOPO DE CONTRATO
 if 'escopo_status' not in st.session_state:
     st.session_state.escopo_status = ["COMPLETO (MAT + M.O.)"] * n_itens
 
@@ -108,90 +107,87 @@ def agrupar_macro(df, col_val):
 def plot_rosca(g, val_tot):
     fig = plt.figure(figsize=(9, 4), facecolor=HEX_FUNDO); ax = fig.add_subplot(111)
     if val_tot == 0: 
-        ax.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold')
-        ax.axis('off')
+        ax.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax.axis('off')
     else:
         palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
         w, t, at = ax.pie(g.iloc[:,1], labels=None, autopct='%1.1f%%', startangle=140, colors=palette, wedgeprops=dict(width=0.45, edgecolor=HEX_FUNDO, linewidth=2), textprops=dict(fontsize=9, fontweight='bold', color='white'), pctdistance=0.75)
-        
-        # Cria a caixa em volta do texto da porcentagem para dar nitidez
-        for autotext in at:
-            autotext.set_bbox(dict(facecolor=HEX_PRIMARIA, edgecolor='none', boxstyle='round,pad=0.3', alpha=0.85))
-            
+        for autotext in at: autotext.set_bbox(dict(facecolor=HEX_PRIMARIA, edgecolor='none', boxstyle='round,pad=0.3', alpha=0.85))
         ax.legend(w, g['MACRO'], loc="center left", bbox_to_anchor=(1, 0.5), frameon=False, fontsize=9)
         ax.add_artist(plt.Circle((0,0), 0.55, fc=HEX_FUNDO))
         ax.annotate(f"TOTAL\nR$ {val_tot/1000:,.0f}k", (0, 0), fontsize=12, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA); ax.axis('equal')
-    
     plt.tight_layout()
     buf = io.BytesIO(); plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
-def plot_gantt(g, m, val_tot):
-    pesos = (g.iloc[:,1] / val_tot).tolist() if val_tot > 0 else [0]*len(g)
-    dur = [max(m*p*2, m*0.2) if p>0 else 0 for p in pesos]
-    starts = [0, dur[0]*0.3 if dur[0]>0 else 0, 0, 0, 0]
-    for i in range(2, len(dur)): starts[i] = starts[i-1] + (dur[i-1]*0.4 if dur[i-1]>0 else 0)
-    max_e = max([starts[i]+dur[i] for i in range(len(dur))]) if sum(dur)>0 else 0
-    if max_e > m: starts = [s*(m/max_e) for s in starts]; dur = [d*(m/max_e) for d in dur]
-    
+def calcular_linha_do_tempo(m, g, dur_base, inic_rel):
+    dur = [m * dur_base[i] if g.iloc[i,1] > 0 else 0 for i in range(5)]
+    starts = [0] * 5
+    for i in range(1, 5):
+        if dur[i] > 0:
+            ant = i - 1
+            while ant >= 0 and dur[ant] == 0: ant -= 1 
+            starts[i] = starts[ant] + (dur[ant] * inic_rel[i]) if ant >= 0 else 0
+    max_e = max([starts[i]+dur[i] for i in range(5)]) if sum(dur) > 0 else 0
+    if max_e > m: 
+        fator = m / max_e
+        starts = [s * fator for s in starts]
+        dur = [d * fator for d in dur]
+    return starts, dur, max_e
+
+def plot_gantt(g, m, val_tot, dur_base, inic_rel):
+    starts, dur, max_e = calcular_linha_do_tempo(m, g, dur_base, inic_rel)
     fig_g = plt.figure(figsize=(9, 2.5), facecolor=HEX_FUNDO); ax_g = fig_g.add_subplot(111)
     if max_e == 0: 
         ax_g.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_g.axis('off')
     else:
-        for i in range(len(dur)):
+        for i in range(5):
             if dur[i] > 0:
-                ax_g.add_patch(patches.Rectangle((starts[i], len(dur)-i-1), dur[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', lw=1))
-                ax_g.text(starts[i]+0.1, len(dur)-i-0.65, g['MACRO'].tolist()[i], color='white', fontsize=8, fontweight='bold')
-        ax_g.set_xlim(0, m); ax_g.set_ylim(-0.5, len(dur)); ax_g.set_xticks(range(0, m+1)); ax_g.set_xticklabels([f'Mês {i}' for i in range(m+1)], color=HEX_PRIMARIA, fontsize=9)
+                ax_g.add_patch(patches.Rectangle((starts[i], 5-i-1), dur[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', lw=1))
+                ax_g.text(starts[i]+0.1, 5-i-0.65, g['MACRO'].tolist()[i], color='white', fontsize=8, fontweight='bold')
+        ax_g.set_xlim(0, m); ax_g.set_ylim(-0.5, 5); ax_g.set_xticks(range(0, m+1)); ax_g.set_xticklabels([f'Mês {i}' for i in range(m+1)], color=HEX_PRIMARIA, fontsize=9)
         ax_g.grid(axis='x', alpha=0.3); ax_g.set_yticks([])
-        ax_g.spines['top'].set_visible(False); ax_g.spines['right'].set_visible(False); ax_g.spines['left'].set_visible(False)
-        ax_g.spines['bottom'].set_color(HEX_PRIMARIA)
-    
+        ax_g.spines['top'].set_visible(False); ax_g.spines['right'].set_visible(False); ax_g.spines['left'].set_visible(False); ax_g.spines['bottom'].set_color(HEX_PRIMARIA)
     plt.tight_layout()
     buf_g = io.BytesIO(); plt.savefig(buf_g, format='png', dpi=200, bbox_inches='tight', facecolor=HEX_FUNDO); plt.close(); buf_g.seek(0); return buf_g
 
-def plot_curva_s(g, m, val_tot):
-    pesos = (g.iloc[:,1] / val_tot).tolist() if val_tot > 0 else [0]*len(g)
-    dur = [max(m*p*2, m*0.2) if p>0 else 0 for p in pesos]
-    starts = [0, dur[0]*0.3 if dur[0]>0 else 0, 0, 0, 0]
-    for i in range(2, len(dur)): starts[i] = starts[i-1] + (dur[i-1]*0.4 if dur[i-1]>0 else 0)
-    max_e = max([starts[i]+dur[i] for i in range(len(dur))]) if sum(dur)>0 else 0
-    if max_e > m: starts = [s*(m/max_e) for s in starts]; dur = [d*(m/max_e) for d in dur]
-    
+def plot_curva_s(g, m, val_tot, dur_base, inic_rel):
+    starts, dur, max_e = calcular_linha_do_tempo(m, g, dur_base, inic_rel)
     fig_c = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO); ax_c = fig_c.add_subplot(111)
     if max_e == 0: 
         ax_c.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_c.axis('off')
     else:
         x_c = np.arange(0.5, m+0.5)
-        p_prev = sum([starts[i]+(dur[i]/2) for i in range(len(dur)) if dur[i]>0])/sum(1 for d in dur if d>0)
+        somas = 0
+        for i in range(5):
+            if dur[i] > 0: somas += (starts[i] + (dur[i]/2))
+        qtd_validos = sum(1 for d in dur if d > 0)
+        pico_previsto = (somas / qtd_validos) if qtd_validos > 0 else m/2
+        
         x = np.linspace(-2.5, 2.5, m)
-        w = np.exp(-(x - ((p_prev/m)*4-2))**2)
+        w = np.exp(-(x - ((pico_previsto/m)*4-2))**2)
         p_mensal = (w/w.sum()) * 100
-        v_mensal = (w/w.sum()) * val_tot # Calcula o valor em Reais para cada mês
+        v_mensal = (w/w.sum()) * val_tot 
         p_acum = np.cumsum(p_mensal)
         
         bars = ax_c.bar(x_c, p_mensal, color=HEX_SECUNDARIA, width=0.5)
         ax_l = ax_c.twinx(); ax_l.plot(x_c, p_acum, color=HEX_DESTAQUE, marker='o', lw=3)
         
-        # Coloca o valor financeiro flutuando na barra
         for idx, bar in enumerate(bars):
-            h = bar.get_height()
-            val = v_mensal[idx]
+            h = bar.get_height(); val = v_mensal[idx]
             txt = f'R$ {val/1000:,.1f}k'.replace('.', ',')
             ax_c.text(bar.get_x() + bar.get_width()/2, h + 1, txt, ha='center', va='bottom', fontsize=8, fontweight='bold', color=HEX_PRIMARIA)
             
         ax_c.set_xlim(0, m); ax_c.set_xticks(x_c); ax_c.set_xticklabels([f'Mês {i+1}' for i in range(m)], color=HEX_PRIMARIA)
         ax_c.set_ylim(0, max(p_mensal)*1.3); ax_l.set_ylim(0, 110); ax_l.set_yticks([])
-        ax_c.spines['top'].set_visible(False); ax_c.spines['right'].set_visible(False); ax_c.spines['left'].set_visible(False)
-        ax_c.spines['bottom'].set_color(HEX_PRIMARIA); ax_l.spines['top'].set_visible(False); ax_l.spines['right'].set_visible(False); ax_l.spines['left'].set_visible(False); ax_l.spines['bottom'].set_visible(False)
+        ax_c.spines['top'].set_visible(False); ax_c.spines['right'].set_visible(False); ax_c.spines['left'].set_visible(False); ax_c.spines['bottom'].set_color(HEX_PRIMARIA)
+        ax_l.spines['top'].set_visible(False); ax_l.spines['right'].set_visible(False); ax_l.spines['left'].set_visible(False); ax_l.spines['bottom'].set_visible(False)
         ax_c.grid(axis='y', alpha=0.3)
-        
     plt.tight_layout()
     buf_c = io.BytesIO(); plt.savefig(buf_c, format='png', dpi=200, bbox_inches='tight', facecolor=HEX_FUNDO); plt.close(); buf_c.seek(0); return buf_c
 
 # ==========================================
 # 4. GERADOR DE PDF ORDENADO
 # ==========================================
-def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m):
+def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m, exibir_graficos):
     buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
     styles = getSampleStyleSheet(); elem = []
     
@@ -217,7 +213,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
     elem.append(Paragraph("PROPOSTA COMERCIAL PARAMETRIZADA", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=18, textColor=COR_PRIMARIA, alignment=1, spaceAfter=5)))
     elem.append(Paragraph("ENGENHARIA E EDIFICAÇÕES EM LIGHT STEEL FRAME", ParagraphStyle('ST', fontName='Helvetica-Bold', fontSize=11, textColor=COR_DESTAQUE, alignment=1, spaceAfter=25)))
     
-    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V7.1 — DOSSIÊ DE ENGENHARIA", b_n)]]
+    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V7.2 — DOSSIÊ DE ENGENHARIA", b_n)]]
     tc = Table(d_capa, colWidths=[150, 300]); tc.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')), ('PADDING', (0,0), (-1,-1), 6)]))
     elem.append(tc); elem.append(Spacer(1, 30)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_PRIMARIA, spaceAfter=8)); elem.append(Paragraph("AMÂNCIO CONSTRUTORA INTELIGENTE", ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7.5, textColor=COR_PRIMARIA, alignment=1))); elem.append(PageBreak())
     
@@ -248,13 +244,14 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
     t_m = Table(d_tab_m, colWidths=[200, 140, 120]); t_m.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_PRIMARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3), ('BACKGROUND', (0,-1), (-1,-1), COR_FUNDO)])); elem.append(t_m); elem.append(PageBreak())
 
     # --- DASHBOARDS MERCADO ---
-    elem.append(Paragraph("DASHBOARDS GLOBAIS (100% DA OBRA)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-    elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS</b>", b_n))
-    elem.append(Image(gm_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
-    elem.append(Paragraph("<b>2. CRONOGRAMA DE EXECUÇÃO FÍSICA (GANTT)</b>", b_n))
-    elem.append(Image(gm_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
-    elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO FINANCEIRO</b>", b_n))
-    elem.append(Image(gm_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
+    if exibir_graficos:
+        elem.append(Paragraph("DASHBOARDS GLOBAIS (100% DA OBRA)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
+        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS</b>", b_n))
+        elem.append(Image(gm_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
+        elem.append(Paragraph("<b>2. CRONOGRAMA DE EXECUÇÃO FÍSICA (GANTT)</b>", b_n))
+        elem.append(Image(gm_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
+        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO FINANCEIRO</b>", b_n))
+        elem.append(Image(gm_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
     # --- EAP 02: CONTRATO (FILTRADO) ---
     elem.append(Paragraph("EAP 02: O SEU CONTRATO AMÂNCIO (FILTRADO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
@@ -270,13 +267,14 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, conf_cats, df, v_mer, v_con, t_m
     t_c = Table(d_tab_c, colWidths=[200, 85, 85, 90]); t_c.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3), ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EBF8FF'))])); elem.append(t_c); elem.append(PageBreak())
 
     # --- DASHBOARDS CONTRATO ---
-    elem.append(Paragraph("DASHBOARDS DO CONTRATO (ESCOPO AMÂNCIO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-    elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS DO CONTRATO</b>", b_n))
-    elem.append(Image(gc_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
-    elem.append(Paragraph("<b>2. CRONOGRAMA DE ATUAÇÃO (GANTT)</b>", b_n))
-    elem.append(Image(gc_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
-    elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DO CONTRATO</b>", b_n))
-    elem.append(Image(gc_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
+    if exibir_graficos:
+        elem.append(Paragraph("DASHBOARDS DO CONTRATO (ESCOPO AMÂNCIO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
+        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS DO CONTRATO</b>", b_n))
+        elem.append(Image(gc_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
+        elem.append(Paragraph("<b>2. CRONOGRAMA DE ATUAÇÃO (GANTT)</b>", b_n))
+        elem.append(Image(gc_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
+        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DO CONTRATO</b>", b_n))
+        elem.append(Image(gc_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
     # --- MEMORIAL ---
     elem.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL", h1))
@@ -345,6 +343,52 @@ df_opcoes = pd.DataFrame({"SUBSISTEMA": df_base["SUBSISTEMA"], "STATUS DO CONTRA
 df_ed = st.data_editor(df_opcoes, hide_index=True, use_container_width=True, column_config={"STATUS DO CONTRATO": st.column_config.SelectboxColumn("STATUS DO CONTRATO", options=["COMPLETO (MAT + M.O.)", "SÓ MATERIAL", "SÓ MÃO DE OBRA", "NÃO INCLUSO"])})
 st.session_state.escopo_status = df_ed["STATUS DO CONTRATO"].tolist()
 
+st.write("---")
+st.write("### 📊 CONFIGURAÇÃO DE DASHBOARDS E CRONOGRAMA")
+
+exibir_graficos = st.checkbox("Incluir Dashboards e Cronogramas (Gantt/Curva S) no Dossiê", value=True)
+
+# Arrays padrão para cálculo
+dur_base = [0.10, 0.15, 0.35, 0.40, 0.35]
+inic_rel = [0.0, 0.50, 0.80, 0.30, 0.60]
+
+if exibir_graficos:
+    with st.expander("⚙️ Ajuste Fino do Cronograma (Duração e Sequência)"):
+        st.write("Defina o tempo de cada macro-etapa (% do Prazo Total) e quando ela começa (% de conclusão da etapa anterior).")
+        
+        # CANTEIRO
+        st.markdown("**1. Canteiro e Gestão**")
+        d1 = st.slider("Duração (% do Prazo)", 5, 100, 10, key="d1")
+        
+        # FUNDAÇÃO
+        st.markdown("**2. Fundação e Infraestrutura**")
+        c2_1, c2_2 = st.columns(2)
+        d2 = c2_1.slider("Duração (% do Prazo)", 5, 100, 15, key="d2")
+        i2 = c2_2.slider("Iniciar após % do Canteiro", 0, 100, 50, key="i2")
+        
+        # ESTRUTURA
+        st.markdown("**3. Estrutura LSF e Telhado**")
+        c3_1, c3_2 = st.columns(2)
+        d3 = c3_1.slider("Duração (% do Prazo)", 5, 100, 35, key="d3")
+        i3 = c3_2.slider("Iniciar após % da Fundação", 0, 100, 80, key="i3")
+        
+        # INSTALAÇÕES
+        st.markdown("**4. Instalações e Vedações**")
+        c4_1, c4_2 = st.columns(2)
+        d4 = c4_1.slider("Duração (% do Prazo)", 5, 100, 40, key="d4")
+        i4 = c4_2.slider("Iniciar após % da Estrutura", 0, 100, 30, key="i4")
+        
+        # ACABAMENTOS
+        st.markdown("**5. Acabamentos**")
+        c5_1, c5_2 = st.columns(2)
+        d5 = c5_1.slider("Duração (% do Prazo)", 5, 100, 35, key="d5")
+        i5 = c5_2.slider("Iniciar após % das Instalações", 0, 100, 60, key="i5")
+        
+        # Atualiza os arrays de cálculo
+        dur_base = [d1/100.0, d2/100.0, d3/100.0, d4/100.0, d5/100.0]
+        inic_rel = [0.0, i2/100.0, i3/100.0, i4/100.0, i5/100.0]
+
+st.write("---")
 bdi = st.slider("MARGEM BDI (%):", 10, 35, 20) / 100.0
 
 if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="primary"):
@@ -386,16 +430,20 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
         txt_map = {"BAIXO": "BÁSICA", "MEDIO": "PADRÃO", "ALTO": "COMPLEXA/LUXO"}
         cf = {'fund': txt_map[nv_fund], 'estr': txt_map[nv_estr], 'inst': txt_map[nv_inst], 'acab': txt_map[nv_acab]}
         
-        # Gera os gráficos independentes
-        buf_gm_r = plot_rosca(gm, v_mer)
-        buf_gm_g = plot_gantt(gm, prazo_meses, v_mer)
-        buf_gm_c = plot_curva_s(gm, prazo_meses, v_mer)
+        # Se os gráficos estiverem ligados, gera eles, se não, envia None
+        if exibir_graficos:
+            buf_gm_r = plot_rosca(gm, v_mer)
+            buf_gm_g = plot_gantt(gm, prazo_meses, v_mer, dur_base, inic_rel)
+            buf_gm_c = plot_curva_s(gm, prazo_meses, v_mer, dur_base, inic_rel)
+            
+            buf_gc_r = plot_rosca(gc, v_con)
+            buf_gc_g = plot_gantt(gc, prazo_meses, v_con, dur_base, inic_rel)
+            buf_gc_c = plot_curva_s(gc, prazo_meses, v_con, dur_base, inic_rel)
+        else:
+            buf_gm_r, buf_gm_g, buf_gm_c = None, None, None
+            buf_gc_r, buf_gc_g, buf_gc_c = None, None, None
         
-        buf_gc_r = plot_rosca(gc, v_con)
-        buf_gc_g = plot_gantt(gc, prazo_meses, v_con)
-        buf_gc_c = plot_curva_s(gc, prazo_meses, v_con)
-        
-        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem)
+        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos)
         
         st.success("✅ DOSSIÊ DUPLO GERADO COM SUCESSO!")
-        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V7.1)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V7.2)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
