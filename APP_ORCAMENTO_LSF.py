@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. CONFIGURAÇÕES GERAIS E CORES
 # ==========================================
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V8.0", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V8.1", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -119,22 +119,17 @@ def plot_rosca(g, val_tot):
     buf = io.BytesIO(); plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
 def calcular_linha_do_tempo(g, dur_w, inic_w):
-    """ Calcula o início e fim baseado nas semanas informadas (Bottom-Up) """
     dur = [dur_w[i] if g.iloc[i,1] > 0 else 0 for i in range(5)]
     starts = [0] * 5
     for i in range(1, 5):
         if dur[i] > 0:
             ant = i - 1
-            while ant >= 0 and dur[ant] == 0: ant -= 1 # Pula etapas excluídas do contrato
+            while ant >= 0 and dur[ant] == 0: ant -= 1 
             starts[i] = starts[ant] + inic_w[i] if ant >= 0 else 0
-            
     max_w = max([starts[i]+dur[i] for i in range(5)]) if sum(dur) > 0 else 0
-    
-    # Converte Semanas para Meses para plotagem dos gráficos (1 mês = 4 semanas comerciais)
     starts_m = [s / 4.0 for s in starts]
     dur_m = [d / 4.0 for d in dur]
     max_m = max_w / 4.0
-    
     return starts_m, dur_m, max_m
 
 def plot_gantt(g, m_prazo, val_tot, dur_semanas, inic_semanas):
@@ -148,11 +143,9 @@ def plot_gantt(g, m_prazo, val_tot, dur_semanas, inic_semanas):
             if dur_m[i] > 0:
                 ax_g.add_patch(patches.Rectangle((starts_m[i], 5-i-1), dur_m[i], 0.7, facecolor=HEX_SECUNDARIA, edgecolor='white', lw=1))
                 ax_g.text(starts_m[i]+0.1, 5-i-0.65, g['MACRO'].tolist()[i], color='white', fontsize=8, fontweight='bold')
-        
         ax_g.set_xlim(0, m_prazo); ax_g.set_ylim(-0.5, 5); ax_g.set_xticks(range(0, m_prazo+1)); ax_g.set_xticklabels([f'Mês {i}' for i in range(m_prazo+1)], color=HEX_PRIMARIA, fontsize=9)
         ax_g.grid(axis='x', alpha=0.3); ax_g.set_yticks([])
         ax_g.spines['top'].set_visible(False); ax_g.spines['right'].set_visible(False); ax_g.spines['left'].set_visible(False); ax_g.spines['bottom'].set_color(HEX_PRIMARIA)
-    
     plt.tight_layout()
     buf_g = io.BytesIO(); plt.savefig(buf_g, format='png', dpi=200, bbox_inches='tight', facecolor=HEX_FUNDO); plt.close(); buf_g.seek(0); return buf_g
 
@@ -195,7 +188,7 @@ def plot_curva_s(g, m_prazo, val_tot, dur_semanas, inic_semanas):
 # ==========================================
 # 4. GERADOR DE PDF
 # ==========================================
-def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m, exibir_graficos):
+def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer, v_con, t_mat_c, t_mo_c, gm_r, gm_g, gm_c, gc_r, gc_g, gc_c, df_m, exibir_graficos, perc_pagamento):
     buf = io.BytesIO(); doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
     styles = getSampleStyleSheet(); elem = []
     
@@ -221,7 +214,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     elem.append(Paragraph("PROPOSTA COMERCIAL PARAMETRIZADA", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=18, textColor=COR_PRIMARIA, alignment=1, spaceAfter=5)))
     elem.append(Paragraph("ENGENHARIA E EDIFICAÇÕES EM LIGHT STEEL FRAME", ParagraphStyle('ST', fontName='Helvetica-Bold', fontSize=11, textColor=COR_DESTAQUE, alignment=1, spaceAfter=25)))
     
-    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES ({sem_prazo} Semanas)", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V8.0 — DOSSIÊ DE ENGENHARIA", b_n)]]
+    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES ({sem_prazo} Semanas)", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V8.1 — DOSSIÊ DE ENGENHARIA", b_n)]]
     tc = Table(d_capa, colWidths=[150, 300]); tc.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')), ('PADDING', (0,0), (-1,-1), 6)]))
     elem.append(tc); elem.append(Spacer(1, 30)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_PRIMARIA, spaceAfter=8)); elem.append(Paragraph("AMÂNCIO CONSTRUTORA INTELIGENTE", ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7.5, textColor=COR_PRIMARIA, alignment=1))); elem.append(PageBreak())
     
@@ -274,6 +267,30 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     d_tab_c.append([Paragraph("<b>TOTAL DO SEU CONTRATO</b>", b_b), Paragraph(f"<b>R$ {t_mat_c:,.2f}</b>", b_b), Paragraph(f"<b>R$ {t_mo_c:,.2f}</b>", b_b), Paragraph(f"<b>R$ {v_con:,.2f}</b>", b_b)])
     t_c = Table(d_tab_c, colWidths=[200, 85, 85, 90]); t_c.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3), ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EBF8FF'))])); elem.append(t_c); elem.append(PageBreak())
 
+    # --- CRONOGRAMA DE PAGAMENTO COMERCIAL ---
+    if v_con > 0:
+        elem.append(Paragraph("PROPOSTA DE PAGAMENTO (FLUXO DO CONTRATO)", h1))
+        elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
+        elem.append(Paragraph("<i>Previsão de faturamento mensal baseada no valor total do escopo selecionado para o contrato (R$).</i>", b_n))
+        elem.append(Spacer(1,5))
+        
+        d_pag = [[Paragraph("<b>PARCELA / MÊS</b>", b_w), Paragraph("<b>PERCENTUAL (%)</b>", b_w), Paragraph("<b>VALOR DA PARCELA (R$)</b>", b_w)]]
+        soma_val = 0
+        for idx, perc in enumerate(perc_pagamento):
+            val_parc = v_con * (perc / 100.0)
+            soma_val += val_parc
+            d_pag.append([f"Mês {idx+1}", f"{perc:.2f}%", f"R$ {val_parc:,.2f}"])
+        
+        d_pag.append([Paragraph("<b>TOTAL PROPOSTO</b>", b_b), Paragraph(f"<b>{sum(perc_pagamento):.2f}%</b>", b_b), Paragraph(f"<b>R$ {soma_val:,.2f}</b>", b_b)])
+        t_pag = Table(d_pag, colWidths=[150, 100, 150])
+        t_pag.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+            ('PADDING', (0,0), (-1,-1), 4),
+            ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EBF8FF'))
+        ]))
+        elem.append(t_pag); elem.append(PageBreak())
+
     # --- DASHBOARDS CONTRATO ---
     if exibir_graficos:
         elem.append(Paragraph("DASHBOARDS DO CONTRATO (ESCOPO AMÂNCIO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
@@ -281,7 +298,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
         elem.append(Image(gc_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
         elem.append(Paragraph("<b>2. CRONOGRAMA DE ATUAÇÃO (GANTT)</b>", b_n))
         elem.append(Image(gc_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
-        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DO CONTRATO</b>", b_n))
+        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DA OBRA (FÍSICO)</b>", b_n))
         elem.append(Image(gc_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
     # --- MEMORIAL ---
@@ -378,7 +395,7 @@ with c_cron2:
 dur_semanas = [d1, d2, d3, d4, d5]
 inic_semanas = [0, i2, i3, i4, i5]
 
-# Calcula prazo global na hora para mostrar pro usuário
+# Calcula prazo global
 starts_w = [0]*5
 for i in range(1, 5): starts_w[i] = starts_w[i-1] + inic_semanas[i]
 max_w = max([starts_w[i] + dur_semanas[i] for i in range(5)])
@@ -386,9 +403,35 @@ prazo_meses_global = int(np.ceil(max_w / 4.0))
 
 st.success(f"⏱️ PRAZO TOTAL CALCULADO: **{max_w} semanas** (Aprox. **{prazo_meses_global} meses**)")
 
-exibir_graficos = st.checkbox("Incluir Dashboards e Cronogramas no Dossiê", value=True)
+# ==========================================
+# NOVO: FLUXO COMERCIAL DE PAGAMENTO
+# ==========================================
+st.write("---")
+st.write("### 💰 FLUXO DE PAGAMENTO DO CONTRATO")
+st.info("Distribua o percentual do valor do contrato que será faturado/cobrado a cada mês.")
+
+if 'old_prazo' not in st.session_state or st.session_state.old_prazo != prazo_meses_global:
+    st.session_state.old_prazo = prazo_meses_global
+    val_default = round(100.0 / prazo_meses_global, 2) if prazo_meses_global > 0 else 100.0
+    st.session_state.perc_pagamento = [val_default] * (prazo_meses_global - 1) + [round(100.0 - (val_default * (prazo_meses_global - 1)), 2)]
+
+perc_pagamento = []
+cols_pag = st.columns(min(prazo_meses_global, 6))
+for m in range(prazo_meses_global):
+    with cols_pag[m % 6]:
+        val = st.number_input(f"Mês {m+1} (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.perc_pagamento[m]), step=1.0, key=f"pag_m_{m}")
+        perc_pagamento.append(val)
+
+st.session_state.perc_pagamento = perc_pagamento
+
+soma_perc = sum(perc_pagamento)
+if abs(soma_perc - 100.0) > 0.01:
+    st.warning(f"⚠️ A soma dos percentuais está em **{soma_perc:.2f}%**. Ajuste para fechar exatos 100%.")
+else:
+    st.success("✅ Soma perfeita: **100%**")
 
 st.write("---")
+exibir_graficos = st.checkbox("Incluir Dashboards e Cronogramas (Imagens) no Dossiê", value=True)
 bdi = st.slider("MARGEM BDI (%):", 10, 35, 20) / 100.0
 
 if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="primary"):
@@ -439,7 +482,7 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
             buf_gm_r, buf_gm_g, buf_gm_c = None, None, None
             buf_gc_r, buf_gc_g, buf_gc_c = None, None, None
         
-        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses_global, max_w, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos)
+        pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses_global, max_w, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos, perc_pagamento)
         
         st.success("✅ DOSSIÊ DUPLO GERADO COM SUCESSO!")
-        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V8.0)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V8.1)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
