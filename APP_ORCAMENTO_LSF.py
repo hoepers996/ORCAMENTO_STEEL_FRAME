@@ -12,20 +12,18 @@ import io
 st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF", page_icon="🏗️", layout="centered")
 
 st.title("🏗️ GERADOR DE ORÇAMENTOS - STEEL FRAME")
-st.subheader("SISTEMA CONECTADO AO GOOGLE SHEETS V3.0")
+st.subheader("SISTEMA DE ESTIMATIVA PARAMÉTRICA V4.0 (CUSTOMIZADO)")
 
 st.markdown("---")
 
-# 2. FUNÇÃO PARA LER OS DADOS DIRETO DA SUA PLANILHA NO GOOGLE DRIVE
-@st.cache_data(ttl=60)  # ATUALIZA A CADA 60 SEGUNDOS
+# 2. CARREGAR DADOS DO GOOGLE SHEETS
+@st.cache_data(ttl=60)
 def carregar_dados_google_sheets():
-    # LINK DE EXPORTAÇÃO CSV DA SUA PLANILHA
     sheet_url = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv"
     try:
         df = pd.read_csv(sheet_url)
         return df
     except Exception as e:
-        # BASE DE BACKUP CASO A INTERNET DA PLANILHA FALHE
         data_backup = [
             {"SUBSISTEMA": "INFRAESTRUTURA", "DESCRICAO_DO_ITEM": "RADIER OTIMIZADO E IMPERMEABILIZACAO", "CONSUMO_MEDIO_M2": 1.00, "CUSTO_UNITARIO_REF_RS": 300.00},
             {"SUBSISTEMA": "ESTRUTURA_LSF", "DESCRICAO_DO_ITEM": "PERFIS GALVANIZADOS ENGENHERADOS", "CONSUMO_MEDIO_M2": 30.00, "CUSTO_UNITARIO_REF_RS": 11.00},
@@ -38,12 +36,12 @@ def carregar_dados_google_sheets():
         ]
         return pd.DataFrame(data_backup)
 
-# 3. FUNÇÃO PARA GERAR O PDF NA MEMÓRIA
-def gerar_pdf_bytes(cliente, local, area_m2, padrao, bdi, df, valor_total, valor_m2):
+# 3. GERAR PDF
+def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, valor_total, valor_m2):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     
-    # GERAR GRÁFICO
+    # GRÁFICO
     fig, ax = plt.subplots(figsize=(6, 3))
     labels = ['INFRA', 'ESTRUTURA LSF', 'FECH. EXT.', 'ISOLAMENTO', 'FECH. INT.', 'COBERTURA', 'INSTALAÇÕES', 'ACABAMENTOS']
     sizes = df["PARTICIPACAO_PCT"].tolist()
@@ -70,8 +68,8 @@ def gerar_pdf_bytes(cliente, local, area_m2, padrao, bdi, df, valor_total, valor
     
     dados_cliente = [
         [Paragraph(f"<b>CLIENTE:</b> {cliente}", body_style), Paragraph(f"<b>LOCAL:</b> {local}", body_style)],
-        [Paragraph(f"<b>ÁREA CONSTRUÍDA:</b> {area_m2:,.2f} M²", body_style), Paragraph("<b>SISTEMA:</b> LIGHT STEEL FRAME (LSF)", body_style)],
-        [Paragraph(f"<b>PADRÃO DE ACABAMENTO:</b> {padrao}", body_style), Paragraph("<b>PRAZO ESTIMADO:</b> 4 A 5 MESES", body_style)]
+        [Paragraph(f"<b>ÁREA CONSTRUÍDA TOTAL:</b> {area_m2:,.2f} M²", body_style), Paragraph(f"<b>ÁREA FUNDAÇÃO:</b> {area_fundacao_m2:,.2f} M² ({tipo_fundacao})", body_style)],
+        [Paragraph(f"<b>PADRÃO ACABAMENTO:</b> {padrao}", body_style), Paragraph("<b>SISTEMA:</b> LIGHT STEEL FRAME (LSF)", body_style)]
     ]
     t_cliente = Table(dados_cliente, colWidths=[270, 270])
     t_cliente.setStyle(TableStyle([
@@ -85,7 +83,7 @@ def gerar_pdf_bytes(cliente, local, area_m2, padrao, bdi, df, valor_total, valor
     elements.append(Paragraph("1. RESUMO EXECUTIVO DO ORÇAMENTO", section_style))
     resumo_data = [
         [Paragraph("<b>VALOR TOTAL ESTIMADO:</b>", body_style), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_style)],
-        [Paragraph("<b>VALOR ESTIMADO POR M²:</b>", body_style), Paragraph(f"<b>R$ {valor_m2:,.2f} / M²</b>", body_style)]
+        [Paragraph("<b>VALOR ESTIMADO POR M² CONSTRUÍDO:</b>", body_style), Paragraph(f"<b>R$ {valor_m2:,.2f} / M²</b>", body_style)]
     ]
     t_resumo = Table(resumo_data, colWidths=[200, 340])
     t_resumo.setStyle(TableStyle([
@@ -130,45 +128,74 @@ def gerar_pdf_bytes(cliente, local, area_m2, padrao, bdi, df, valor_total, valor
     buffer.seek(0)
     return buffer.getvalue()
 
-# 4. FORMULÁRIO INTERATIVO NO STREAMLIT
+# 4. FORMULÁRIO DE ENTRADA DO USUÁRIO
 with st.form("form_orcamento"):
-    st.write("### 📝 DADOS DA OBRA E CLIENTE")
+    st.write("### 📝 DADOS GERAIS DA OBRA")
     cliente = st.text_input("NOME DO CLIENTE / PROJETO:", value="RESIDENCIAL SILVA")
     local = st.text_input("LOCAL DA OBRA (CIDADE / UF):", value="JOINVILLE / SC")
-    area_m2 = st.number_input("ÁREA TOTAL CONSTRUÍDA (M²):", min_value=10.0, max_value=5000.0, value=250.0, step=10.0)
-    padrao = st.selectbox("PADRÃO DE ACABAMENTO:", ["BAIXO", "MÉDIO", "ALTO"], index=1)
+    area_m2 = st.number_input("ÁREA TOTAL CONSTRUÍDA DA OBRA (M²):", min_value=10.0, max_value=5000.0, value=500.0, step=10.0)
+    padrao = st.selectbox("PADRÃO DE ACABAMENTO GERAL:", ["BAIXO", "MÉDIO", "ALTO"], index=1)
+    
+    st.write("### 🏗️ PARÂMETROS DA FUNDAÇÃO / INFRAESTRUTURA")
+    area_fundacao_m2 = st.number_input("ÁREA DA FUNDAÇÃO / PROJEÇÃO (M²):", min_value=10.0, max_value=5000.0, value=250.0, step=10.0)
+    tipo_fundacao = st.selectbox("COMPLEXIDADE DA FUNDAÇÃO:", [
+        "LEVE (SOLO BOM / RADIER SIMPLES)", 
+        "MODERADA (PADRÃO DE MERCADO)", 
+        "PESADA (SOLO FRÁGIL / REFORÇO DE ESTACAS)"
+    ], index=1)
+    
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
     submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA")
 
 if submitted:
-    st.success("✅ CÁLCULOS REALIZADOS COM SUCESSO!")
+    st.success("✅ CÁLCULOS ATUALIZADOS COM SUCESSO!")
     
-    # CARREGAR DADOS DA PLANILHA GOOGLE
     df = carregar_dados_google_sheets()
     
-    # AJUSTE CONFORME PADRÃO
+    # FATORES
     fator_padrao = 0.85 if padrao == "BAIXO" else (1.00 if padrao == "MÉDIO" else 1.30)
     
-    # PROCESSAMENTO DE CUSTOS
-    df["CUSTO_DIRETO_TOTAL"] = df["CONSUMO_MEDIO_M2"] * df["CUSTO_UNITARIO_REF_RS"] * fator_padrao * area_m2
+    if "LEVE" in tipo_fundacao:
+        fator_fundacao = 0.85
+    elif "PESADA" in tipo_fundacao:
+        fator_fundacao = 1.35
+    else:
+        fator_fundacao = 1.00
+
+    # CÁLCULO CUSTOMIZADO
+    custos_diretos = []
+    for idx, row in df.iterrows():
+        sub = str(row["SUBSISTEMA"]).upper()
+        consumo = float(row["CONSUMO_MEDIO_M2"])
+        custo_unit = float(row["CUSTO_UNITARIO_REF_RS"])
+        
+        if "INFRA" in sub or "RADIER" in sub:
+            area_aplicada = area_fundacao_m2
+            fator_extra = fator_fundacao
+        else:
+            area_aplicada = area_m2
+            fator_extra = 1.00
+            
+        custo_item = consumo * custo_unit * fator_padrao * fator_extra * area_aplicada
+        custos_diretos.append(custo_item)
+
+    df["CUSTO_DIRETO_TOTAL"] = custos_diretos
     df["CUSTO_FINAL_COM_BDI"] = df["CUSTO_DIRETO_TOTAL"] * (1 + bdi)
     df["PARTICIPACAO_PCT"] = (df["CUSTO_DIRETO_TOTAL"] / df["CUSTO_DIRETO_TOTAL"].sum()) * 100
     
     valor_total = df["CUSTO_FINAL_COM_BDI"].sum()
     valor_m2 = valor_total / area_m2
     
-    # RESUMO FINANCEIRO NA TELA
+    # EXIBIÇÃO
     col1, col2 = st.columns(2)
     col1.metric("VALOR TOTAL ESTIMADO", f"R$ {valor_total:,.2f}")
-    col2.metric("VALOR POR M²", f"R$ {valor_m2:,.2f} / m²")
+    col2.metric("VALOR POR M² CONSTRUÍDO", f"R$ {valor_m2:,.2f} / m²")
     
     st.markdown("---")
     
-    # GERAÇÃO DO ARQUIVO PDF
-    pdf_bytes = gerar_pdf_bytes(cliente, local, area_m2, padrao, bdi, df, valor_total, valor_m2)
+    pdf_bytes = gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], padrao, bdi, df, valor_total, valor_m2)
     
-    # BOTÃO DE DOWNLOAD DO PDF
     st.download_button(
         label="📥 BAIXAR PROPOSTA COMERCIAL EM PDF",
         data=pdf_bytes,
