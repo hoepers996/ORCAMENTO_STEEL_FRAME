@@ -1,18 +1,19 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak
 from reportlab.lib.units import inch
 import io
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V1.7.1", page_icon="🏗️", layout="centered")
+st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V2.0", page_icon="🏗️", layout="centered")
 
 st.title("🏗️ GERADOR DE ORÇAMENTOS - STEEL FRAME")
-st.subheader("ESTIMATIVA PARAMÉTRICA V1.7.1 (PRÉ-VISUALIZAÇÃO NATIVA)")
+st.subheader("DASHBOARDS EXECUTIVOS E PROPOSTA 2 PÁGINAS V2.0")
 
 st.markdown("---")
 
@@ -48,50 +49,142 @@ def carregar_dados_google_sheets():
         ]
         return pd.DataFrame(data_backup)
 
-# 3. GERADOR DE PDF FLEXÍVEL
-def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, valor_total, valor_m2, exibir_separado):
+# 3. GERADOR DE GRÁFICOS DASHBOARD (DONUT, GANTT E CURVA S)
+def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
+    macro_map = {
+        '01': '1. Gestão e Canteiro',
+        '02': '1. Gestão e Canteiro',
+        '03': '1. Gestão e Canteiro',
+        '04': '1. Gestão e Canteiro',
+        '05': '2. Fundação e Infra',
+        '09': '2. Fundação e Infra',
+        '06': '3. Estrutura LSF e Cobertura',
+        '08': '3. Estrutura LSF e Cobertura',
+        '07': '4. Vedações e Instalações',
+        '10': '4. Vedações e Instalações',
+        '11': '4. Vedações e Instalações',
+        '12': '4. Vedações e Instalações',
+        '13': '5. Acabamentos e Esquadrias',
+        '14': '5. Acabamentos e Esquadrias',
+        '15': '5. Acabamentos e Esquadrias',
+        '16': '5. Acabamentos e Esquadrias',
+        '17': '5. Acabamentos e Esquadrias'
+    }
+    
+    df_macro = df.copy()
+    df_macro['MACRO_GRUPO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
+    grouped = df_macro.groupby('MACRO_GRUPO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
+    grouped['PARTICIPACAO'] = (grouped['CUSTO_FINAL_COM_BDI'] / valor_total) * 100
+    
+    # A. GRÁFICO DE ROSCA (MACRO COMPOSIÇÃO)
+    fig1, ax1 = plt.subplots(figsize=(6.2, 2.8))
+    labels = [f"{row['MACRO_GRUPO']}\n(R$ {row['CUSTO_FINAL_COM_BDI']/1000:,.0f}k - {row['PARTICIPACAO']:.1f}%)" for idx, row in grouped.iterrows()]
+    palette = ['#1A365D', '#2B6CB0', '#3182CE', '#319795', '#D69E2E']
+    
+    wedges, texts, autotexts = ax1.pie(
+        grouped['CUSTO_FINAL_COM_BDI'], 
+        labels=labels, 
+        autopct='', 
+        startangle=140, 
+        colors=palette[:len(grouped)],
+        pctdistance=0.75, 
+        wedgeprops=dict(width=0.42, edgecolor='white', linewidth=2)
+    )
+    for text in texts:
+        text.set_fontsize(7.0)
+        text.set_fontweight('bold')
+        text.set_color('#2D3748')
+        
+    ax1.set_title("DISTRIBUIÇÃO DE CUSTOS POR MACRO-ETAPAS", fontsize=9.5, fontweight='bold', color='#1A365D', pad=10)
+    plt.tight_layout()
+    
+    buf1 = io.BytesIO()
+    plt.savefig(buf1, format='png', dpi=200)
+    plt.close(fig1)
+    buf1.seek(0)
+    
+    # B. CRONOGRAMA GANTT + CURVA S
+    fig2, (ax_gantt, ax_curva) = plt.subplots(2, 1, figsize=(6.2, 4.3), gridspec_kw={'height_ratios': [1.1, 1]})
+    
+    macro_tasks = grouped['MACRO_GRUPO'].tolist()[::-1]
+    m = prazo_meses
+    starts = [m*0.6, m*0.4, m*0.25, m*0.1, 0]
+    durations = [m*0.4, m*0.5, m*0.45, m*0.35, m*0.3]
+    
+    colors_gantt = palette[:len(grouped)][::-1]
+    ax_gantt.barh(macro_tasks, durations, left=starts, color=colors_gantt, height=0.45, edgecolor='#1A365D')
+    ax_gantt.set_xlabel('Prazo de Execução (Meses)', fontsize=7.5, fontweight='bold', color='#2D3748')
+    ax_gantt.set_title(f'CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA ({prazo_meses} MESES)', fontsize=9.5, fontweight='bold', color='#1A365D')
+    ax_gantt.set_xlim(0, prazo_meses)
+    ax_gantt.grid(axis='x', linestyle='--', alpha=0.5)
+    ax_gantt.tick_params(axis='both', labelsize=7.0)
+    
+    # FLUXO FINANCEIRO & CURVA S
+    meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
+    x = np.linspace(-2, 2, prazo_meses)
+    weights = np.exp(-x**2)
+    perc_mensal = (weights / weights.sum()) * 100
+    perc_acum = np.cumsum(perc_mensal)
+    
+    bars = ax_curva.bar(meses_labels, perc_mensal, color='#4299E1', alpha=0.65, label='% Mensal', width=0.5)
+    ax_curva_line = ax_curva.twinx()
+    ax_curva_line.plot(meses_labels, perc_acum, color='#D69E2E', marker='o', linewidth=2.2, markersize=4.5, label='% Acumulado')
+    
+    for bar in bars:
+        height = bar.get_height()
+        ax_curva.annotate(f'{height:.1f}%',
+                          xy=(bar.get_x() + bar.get_width() / 2, height),
+                          xytext=(0, 2),
+                          textcoords="offset points",
+                          ha='center', va='bottom', fontsize=6.0, fontweight='bold', color='#1A365D')
+                          
+    ax_curva.set_title('FLUXO DE DESEMBOLSO MENSAL E CURVA S ACUMULADA', fontsize=9.5, fontweight='bold', color='#1A365D')
+    ax_curva.set_ylabel('Aporte Mensal (%)', fontsize=7.0, fontweight='bold', color='#2B6CB0')
+    ax_curva_line.set_ylabel('Acumulado (%)', fontsize=7.0, fontweight='bold', color='#D69E2E')
+    ax_curva.tick_params(axis='both', labelsize=7.0)
+    ax_curva_line.tick_params(axis='both', labelsize=7.0)
+    ax_curva_line.set_ylim(0, 115)
+    ax_curva.set_ylim(0, max(perc_mensal)*1.25)
+    
+    plt.tight_layout()
+    buf2 = io.BytesIO()
+    plt.savefig(buf2, format='png', dpi=200)
+    plt.close(fig2)
+    buf2.seek(0)
+    
+    return buf1, buf2, grouped
+
+# 4. GERADOR DE PDF MULTIPÁGINAS (2 PÁGINAS)
+def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     
-    # GRÁFICO
-    fig, ax = plt.subplots(figsize=(7, 3.8))
-    sub_names = [str(x)[:22] for x in df["SUBSISTEMA"].tolist()]
-    values = df["PARTICIPACAO_PCT"].tolist()
-    
-    ax.barh(sub_names[::-1], values[::-1], color='#2B6CB0')
-    ax.set_xlabel('Participação (%)', fontsize=8, fontweight='bold')
-    ax.set_title('DISTRIBUIÇÃO DE CUSTOS POR SUBSISTEMA (%)', fontsize=10, fontweight='bold')
-    plt.tight_layout()
-    
-    chart_buffer = io.BytesIO()
-    plt.savefig(chart_buffer, format='png', dpi=200)
-    plt.close(fig)
-    chart_buffer.seek(0)
-    
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=colors.HexColor('#1A365D'), spaceAfter=8)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#4A5568'), spaceAfter=12)
-    section_style = ParagraphStyle('SectionStyle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#2C5282'), spaceBefore=10, spaceAfter=5)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, textColor=colors.HexColor('#1A365D'), spaceAfter=6)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8.5, textColor=colors.HexColor('#4A5568'), spaceAfter=10)
+    section_style = ParagraphStyle('SectionStyle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=10.5, textColor=colors.HexColor('#2C5282'), spaceBefore=8, spaceAfter=4)
     body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#2D3748'))
     
     elements = []
+    
+    # ------------------ PÁGINA 1: PROPOSTA COMERCIAL & EAP ------------------
     elements.append(Paragraph("PROPOSTA COMERCIAL PRELIMINAR — LIGHT STEEL FRAME", title_style))
-    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V1.7.1)", subtitle_style))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=12))
+    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V2.0)", subtitle_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=10))
     
     dados_cliente = [
         [Paragraph(f"<b>CLIENTE:</b> {cliente}", body_style), Paragraph(f"<b>LOCAL:</b> {local}", body_style)],
         [Paragraph(f"<b>ÁREA CONSTRUÍDA TOTAL:</b> {area_m2:,.2f} M²", body_style), Paragraph(f"<b>ÁREA FUNDAÇÃO:</b> {area_fundacao_m2:,.2f} M² ({tipo_fundacao})", body_style)],
-        [Paragraph(f"<b>PADRÃO ACABAMENTO:</b> {padrao}", body_style), Paragraph("<b>SISTEMA:</b> LIGHT STEEL FRAME (LSF)", body_style)]
+        [Paragraph(f"<b>PADRÃO ACABAMENTO:</b> {padrao}", body_style), Paragraph(f"<b>PRAZO PREVISTO DA OBRA:</b> {prazo_meses} MESES", body_style)]
     ]
     t_cliente = Table(dados_cliente, colWidths=[270, 270])
     t_cliente.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EDF2F7')),
-        ('PADDING', (0,0), (-1,-1), 6),
+        ('PADDING', (0,0), (-1,-1), 5),
         ('BOX', (0,0), (-1,-1), 0.8, colors.HexColor('#CBD5E0')),
     ]))
     elements.append(t_cliente)
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 8))
     
     elements.append(Paragraph("1. RESUMO EXECUTIVO DO ORÇAMENTO", section_style))
     
@@ -110,11 +203,11 @@ def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, pa
     t_resumo.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EBF8FF')),
         ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#2B6CB0')),
-        ('PADDING', (0,0), (-1,-1), 6),
+        ('PADDING', (0,0), (-1,-1), 5),
         ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor('#3182CE')),
     ]))
     elements.append(t_resumo)
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 8))
     
     elements.append(Paragraph("2. DETALHAMENTO POR SUBSISTEMA CONSTRUTIVO (EAP)", section_style))
     
@@ -161,20 +254,30 @@ def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, pa
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2B6CB0')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
-        ('PADDING', (0,0), (-1,-1), 3.5),
+        ('PADDING', (0,0), (-1,-1), 2.8),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EDF2F7')),
     ]))
     elements.append(t_detalhes)
-    elements.append(Spacer(1, 10))
     
-    elements.append(Paragraph("3. VISUALIZAÇÃO DA COMPOSIÇÃO DE CUSTOS", section_style))
-    elements.append(Image(chart_buffer, width=5.5*inch, height=3.0*inch))
+    # ------------------ PÁGINA 2: DASHBOARDS & PLANEJAMENTO ------------------
+    elements.append(PageBreak())
+    
+    elements.append(Paragraph("DASHBOARD EXECUTIVO & PLANO DE EXECUÇÃO DA OBRA", title_style))
+    elements.append(Paragraph("ANÁLISE DE COMPOSIÇÃO, CRONOGRAMA FÍSICO E FLUXO FINANCEIRO ACUMULADO", subtitle_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=8))
+    
+    elements.append(Paragraph("3. DISTRIBUIÇÃO DE CUSTOS POR MACRO-ETAPAS", section_style))
+    elements.append(Image(buf1, width=6.2*inch, height=2.8*inch))
+    elements.append(Spacer(1, 6))
+    
+    elements.append(Paragraph("4. CRONOGRAMA FÍSICO-FINANCEIRO E CURVA S ACUMULADA", section_style))
+    elements.append(Image(buf2, width=6.2*inch, height=4.3*inch))
     
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
 
-# 4. FORMULÁRIO DE ENTRADA
+# 5. FORMULÁRIO DE ENTRADA INTERATIVO
 with st.form("form_orcamento"):
     st.write("### 📝 DADOS GERAIS DA OBRA")
     cliente = st.text_input("NOME DO CLIENTE / PROJETO:", value="RESIDENCIAL SILVA")
@@ -182,7 +285,7 @@ with st.form("form_orcamento"):
     area_m2 = st.number_input("ÁREA TOTAL CONSTRUÍDA DA OBRA (M²):", min_value=10.0, max_value=5000.0, value=500.0, step=10.0)
     padrao = st.selectbox("PADRÃO DE ACABAMENTO GERAL:", ["BAIXO", "MÉDIO", "ALTO"], index=1)
     
-    st.write("### 🏗️ PARÂMETROS DA FUNDAÇÃO / INFRAESTRUTURA")
+    st.write("### 🏗️ PARÂMETROS DA FUNDAÇÃO E PRAZO")
     area_fundacao_m2 = st.number_input("ÁREA DA FUNDAÇÃO / PROJEÇÃO (M²):", min_value=10.0, max_value=5000.0, value=250.0, step=10.0)
     tipo_fundacao = st.selectbox("COMPLEXIDADE DA FUNDAÇÃO:", [
         "LEVE (SOLO BOM / RADIER SIMPLES)", 
@@ -190,7 +293,9 @@ with st.form("form_orcamento"):
         "PESADA (SOLO FRÁGIL / REFORÇO DE ESTACAS)"
     ], index=1)
     
-    st.write("### ⚙️ FORMATO DE APRESENTAÇÃO DOS VALORES")
+    prazo_meses = st.slider("PRAZO ESTIMADO DE EXECUÇÃO DA OBRA (MESES):", min_value=3, max_value=12, value=6, step=1)
+    
+    st.write("### ⚙️ FORMATO DE APRESENTAÇÃO E BDI")
     opcao_exibicao = st.radio(
         "COMO DESEJA EXIBIR OS VALORES NA TELA E NO PDF?",
         ["JUNTOS (VALOR UNIFICADO)", "SEPARADOS (MATERIAL E MÃO DE OBRA)"],
@@ -200,10 +305,10 @@ with st.form("form_orcamento"):
     
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA")
+    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA E DASHBOARDS (V2.0)")
 
 if submitted:
-    st.success("✅ CÁLCULOS EXECUTADOS COM SUCESSO!")
+    st.success("✅ PROPOSTA V2.0 E DASHBOARDS PROCESSADOS COM SUCESSO!")
     
     df = carregar_dados_google_sheets()
     
@@ -256,25 +361,28 @@ if submitted:
     
     st.markdown("---")
     
-    pdf_bytes = gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], padrao, bdi, df, valor_total, valor_m2, exibir_separado)
+    # GERAR GRÁFICOS DO DASHBOARD
+    buf1, buf2, grouped = gerar_graficos_dashboard(df, valor_total, prazo_meses)
+    
+    # GERAR PDF DE 2 PÁGINAS
+    pdf_bytes = gerar_pdf_bytes(
+        cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], 
+        padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
+    )
     
     # BOTÃO DE DOWNLOAD
     st.download_button(
-        label="📥 BAIXAR PROPOSTA COMERCIAL EM PDF",
+        label="📥 BAIXAR RELATÓRIO EXECUTIVO E DASHBOARDS (PDF 2 PÁGINAS)",
         data=pdf_bytes,
-        file_name=f"PROPOSTA_{cliente.replace(' ', '_').upper()}.pdf",
+        file_name=f"RELATORIO_EXECUTIVO_{cliente.replace(' ', '_').upper()}.pdf",
         mime="application/pdf"
     )
 
-    # PRÉ-VISUALIZAÇÃO NATIVA SEM BLOQUEIO DE NAVEGADOR
-    with st.expander("👁️ CLIQUE AQUI PARA PRÉ-VISUALIZAR A PROPOSTA NA TELA"):
-        st.markdown(f"### 📄 PROPOSTA COMERCIAL — {cliente.upper()}")
-        st.markdown(f"**Local:** {local} | **Área Total:** {area_m2:,.2f} m² | **Padrão:** {padrao}")
-        st.markdown(f"**Fundação:** {area_fundacao_m2:,.2f} m² ({tipo_fundacao.split(' ')[0]})")
-        
+    # VISUALIZAÇÃO NATIVA DOS DASHBOARDS E DA EAP NO STREAMLIT
+    with st.expander("👁️ CLIQUE AQUI PARA VER A PRÉ-VISUALIZAÇÃO COMPLETA DA PROPOSTA"):
+        st.markdown("### 📄 PÁGINA 1: EAP E VALORES DETALHADOS")
+        st.markdown(f"**Cliente:** {cliente.upper()} | **Local:** {local} | **Prazo:** {prazo_meses} meses")
         st.info(f"💰 **VALOR TOTAL DO PROJETO:** R$ {valor_total:,.2f} (R$ {valor_m2:,.2f} / m²)")
-        
-        st.markdown("#### 📊 Detalhamento dos Subsistemas (EAP)")
         
         if exibir_separado:
             df_preview = df[["SUBSISTEMA", "CUSTO_MAT_FINAL", "CUSTO_MO_FINAL", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
@@ -293,11 +401,7 @@ if submitted:
                 "Part. (%)": "{:.1f}%"
             }), use_container_width=True)
             
-        st.markdown("#### 📈 Distribuição Visual dos Custos")
-        fig_preview, ax_prev = plt.subplots(figsize=(7, 3.5))
-        sub_names = [str(x)[:22] for x in df["SUBSISTEMA"].tolist()]
-        values = df["PARTICIPACAO_PCT"].tolist()
-        ax_prev.barh(sub_names[::-1], values[::-1], color='#2B6CB0')
-        ax_prev.set_xlabel('Participação (%)', fontsize=8, fontweight='bold')
-        plt.tight_layout()
-        st.pyplot(fig_preview)
+        st.markdown("---")
+        st.markdown("### 📊 PÁGINA 2: DASHBOARDS EXECUTIVOS E PLANEJAMENTO")
+        st.image(buf1, caption="Distribuição de Custos por Macro-Etapas", use_column_width=True)
+        st.image(buf2, caption="Cronograma Físico (Gantt) e Fluxo Financeiro (Curva S)", use_column_width=True)
