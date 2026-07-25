@@ -8,16 +8,30 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak
 from reportlab.lib.units import inch
 import io
+import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="GERADOR DE ORÇAMENTOS LSF V2.0", page_icon="🏗️", layout="centered")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.0", page_icon="🏗️", layout="centered")
 
-st.title("🏗️ GERADOR DE ORÇAMENTOS - STEEL FRAME")
-st.subheader("DASHBOARDS EXECUTIVOS E PROPOSTA 2 PÁGINAS V2.0")
+st.title("🏗️ AMÂNCIO — CONSTRUTORA INTELIGENTE")
+st.subheader("GERADOR DE DOSSIÊ COMERCIAL E ORÇAMENTO (V3.0)")
 
 st.markdown("---")
 
-# 2. CARREGAR DADOS DO GOOGLE SHEETS COM BACKUP DUAL
+# CORES OFICIAIS DA MARCA AMÂNCIO
+HEX_PRIMARIA = "#0F2C3D"
+HEX_DESTAQUE = "#E83F25"
+HEX_SECUNDARIA = "#205475"
+HEX_FUNDO = "#F0F4F8"
+HEX_TEXTO = "#1A202C"
+
+COR_PRIMARIA = colors.HexColor(HEX_PRIMARIA)
+COR_DESTAQUE = colors.HexColor(HEX_DESTAQUE)
+COR_SECUNDARIA = colors.HexColor(HEX_SECUNDARIA)
+COR_FUNDO = colors.HexColor(HEX_FUNDO)
+COR_TEXTO = colors.HexColor(HEX_TEXTO)
+
+# 2. CARREGAR DADOS DO GOOGLE SHEETS COM BACKUP
 @st.cache_data(ttl=60)
 def carregar_dados_google_sheets():
     sheet_url = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv"
@@ -26,8 +40,8 @@ def carregar_dados_google_sheets():
         if len(df) >= 10 and "CUSTO_MAT_UNIT_RS" in df.columns:
             return df
         else:
-            raise ValueError("Colunas desatualizadas na planilha.")
-    except Exception as e:
+            raise ValueError("Colunas desatualizadas.")
+    except Exception:
         data_backup = [
             {"SUBSISTEMA": "01. SERVIÇOS PRELIMINARES", "CONSUMO_MEDIO_M2": 1.00, "CUSTO_MAT_UNIT_RS": 5.00, "CUSTO_MO_UNIT_RS": 20.00},
             {"SUBSISTEMA": "02. GESTÃO DE OBRA E ADM", "CONSUMO_MEDIO_M2": 1.00, "CUSTO_MAT_UNIT_RS": 10.00, "CUSTO_MO_UNIT_RS": 110.00},
@@ -49,26 +63,14 @@ def carregar_dados_google_sheets():
         ]
         return pd.DataFrame(data_backup)
 
-# 3. GERADOR DE GRÁFICOS DASHBOARD (DONUT, GANTT E CURVA S)
+# 3. GERADOR DE GRÁFICOS DO DASHBOARD
 def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     macro_map = {
-        '01': '1. Gestão e Canteiro',
-        '02': '1. Gestão e Canteiro',
-        '03': '1. Gestão e Canteiro',
-        '04': '1. Gestão e Canteiro',
-        '05': '2. Fundação e Infra',
-        '09': '2. Fundação e Infra',
-        '06': '3. Estrutura LSF e Cobertura',
-        '08': '3. Estrutura LSF e Cobertura',
-        '07': '4. Vedações e Instalações',
-        '10': '4. Vedações e Instalações',
-        '11': '4. Vedações e Instalações',
-        '12': '4. Vedações e Instalações',
-        '13': '5. Acabamentos e Esquadrias',
-        '14': '5. Acabamentos e Esquadrias',
-        '15': '5. Acabamentos e Esquadrias',
-        '16': '5. Acabamentos e Esquadrias',
-        '17': '5. Acabamentos e Esquadrias'
+        '01': '1. Gestão e Canteiro', '02': '1. Gestão e Canteiro', '03': '1. Gestão e Canteiro', '04': '1. Gestão e Canteiro',
+        '05': '2. Fundação e Infra', '09': '2. Fundação e Infra',
+        '06': '3. Estrutura LSF e Telhado', '08': '3. Estrutura LSF e Telhado',
+        '07': '4. Vedações e Instalações', '10': '4. Vedações e Instalações', '11': '4. Vedações e Instalações', '12': '4. Vedações e Instalações',
+        '13': '5. Acabamentos e Externos', '14': '5. Acabamentos e Externos', '15': '5. Acabamentos e Externos', '16': '5. Acabamentos e Externos', '17': '5. Acabamentos e Externos'
     }
     
     df_macro = df.copy()
@@ -76,71 +78,52 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     grouped = df_macro.groupby('MACRO_GRUPO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
     grouped['PARTICIPACAO'] = (grouped['CUSTO_FINAL_COM_BDI'] / valor_total) * 100
     
-    # A. GRÁFICO DE ROSCA (MACRO COMPOSIÇÃO)
-    fig1, ax1 = plt.subplots(figsize=(6.2, 2.8))
+    # ROSCA
+    fig1, ax1 = plt.subplots(figsize=(6.2, 2.7))
     labels = [f"{row['MACRO_GRUPO']}\n(R$ {row['CUSTO_FINAL_COM_BDI']/1000:,.0f}k - {row['PARTICIPACAO']:.1f}%)" for idx, row in grouped.iterrows()]
-    palette = ['#1A365D', '#2B6CB0', '#3182CE', '#319795', '#D69E2E']
+    palette = [HEX_PRIMARIA, HEX_DESTAQUE, HEX_SECUNDARIA, '#319795', '#D69E2E']
     
-    wedges, texts, autotexts = ax1.pie(
-        grouped['CUSTO_FINAL_COM_BDI'], 
-        labels=labels, 
-        autopct='', 
-        startangle=140, 
-        colors=palette[:len(grouped)],
-        pctdistance=0.75, 
-        wedgeprops=dict(width=0.42, edgecolor='white', linewidth=2)
-    )
-    for text in texts:
-        text.set_fontsize(7.0)
-        text.set_fontweight('bold')
-        text.set_color('#2D3748')
-        
-    ax1.set_title("DISTRIBUIÇÃO DE CUSTOS POR MACRO-ETAPAS", fontsize=9.5, fontweight='bold', color='#1A365D', pad=10)
+    ax1.pie(grouped['CUSTO_FINAL_COM_BDI'], labels=labels, startangle=140, colors=palette[:len(grouped)],
+            wedgeprops=dict(width=0.42, edgecolor='white', linewidth=2),
+            textprops=dict(fontsize=6.8, fontweight='bold', color=HEX_TEXTO))
+    ax1.set_title("DISTRIBUIÇÃO FINANCEIRA POR MACRO-GRUPO DE OBRA", fontsize=9.5, fontweight='bold', color=HEX_PRIMARIA, pad=8)
     plt.tight_layout()
-    
     buf1 = io.BytesIO()
     plt.savefig(buf1, format='png', dpi=200)
     plt.close(fig1)
     buf1.seek(0)
     
-    # B. CRONOGRAMA GANTT + CURVA S
-    fig2, (ax_gantt, ax_curva) = plt.subplots(2, 1, figsize=(6.2, 4.3), gridspec_kw={'height_ratios': [1.1, 1]})
-    
+    # GANTT + CURVA S
+    fig2, (ax_gantt, ax_curva) = plt.subplots(2, 1, figsize=(6.2, 4.2), gridspec_kw={'height_ratios': [1.1, 1]})
     macro_tasks = grouped['MACRO_GRUPO'].tolist()[::-1]
     m = prazo_meses
     starts = [m*0.6, m*0.4, m*0.25, m*0.1, 0]
     durations = [m*0.4, m*0.5, m*0.45, m*0.35, m*0.3]
     
-    colors_gantt = palette[:len(grouped)][::-1]
-    ax_gantt.barh(macro_tasks, durations, left=starts, color=colors_gantt, height=0.45, edgecolor='#1A365D')
-    ax_gantt.set_xlabel('Prazo de Execução (Meses)', fontsize=7.5, fontweight='bold', color='#2D3748')
-    ax_gantt.set_title(f'CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA ({prazo_meses} MESES)', fontsize=9.5, fontweight='bold', color='#1A365D')
+    ax_gantt.barh(macro_tasks, durations, left=starts, color=palette[:len(grouped)][::-1], height=0.45, edgecolor=HEX_PRIMARIA)
+    ax_gantt.set_xlabel('Prazo de Execução (Meses)', fontsize=7.5, fontweight='bold')
+    ax_gantt.set_title(f'CRONOGRAMA MACRO DE EXECUÇÃO FÍSICA ({prazo_meses} MESES)', fontsize=9.5, fontweight='bold', color=HEX_PRIMARIA)
     ax_gantt.set_xlim(0, prazo_meses)
     ax_gantt.grid(axis='x', linestyle='--', alpha=0.5)
     ax_gantt.tick_params(axis='both', labelsize=7.0)
     
-    # FLUXO FINANCEIRO & CURVA S
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
     x = np.linspace(-2, 2, prazo_meses)
     weights = np.exp(-x**2)
     perc_mensal = (weights / weights.sum()) * 100
     perc_acum = np.cumsum(perc_mensal)
     
-    bars = ax_curva.bar(meses_labels, perc_mensal, color='#4299E1', alpha=0.65, label='% Mensal', width=0.5)
+    bars = ax_curva.bar(meses_labels, perc_mensal, color=HEX_SECUNDARIA, alpha=0.65, width=0.5)
     ax_curva_line = ax_curva.twinx()
-    ax_curva_line.plot(meses_labels, perc_acum, color='#D69E2E', marker='o', linewidth=2.2, markersize=4.5, label='% Acumulado')
+    ax_curva_line.plot(meses_labels, perc_acum, color=HEX_DESTAQUE, marker='o', linewidth=2.2, markersize=4.5)
     
     for bar in bars:
-        height = bar.get_height()
-        ax_curva.annotate(f'{height:.1f}%',
-                          xy=(bar.get_x() + bar.get_width() / 2, height),
-                          xytext=(0, 2),
-                          textcoords="offset points",
-                          ha='center', va='bottom', fontsize=6.0, fontweight='bold', color='#1A365D')
-                          
-    ax_curva.set_title('FLUXO DE DESEMBOLSO MENSAL E CURVA S ACUMULADA', fontsize=9.5, fontweight='bold', color='#1A365D')
-    ax_curva.set_ylabel('Aporte Mensal (%)', fontsize=7.0, fontweight='bold', color='#2B6CB0')
-    ax_curva_line.set_ylabel('Acumulado (%)', fontsize=7.0, fontweight='bold', color='#D69E2E')
+        h = bar.get_height()
+        ax_curva.annotate(f'{h:.1f}%', xy=(bar.get_x() + bar.get_width() / 2, h), xytext=(0, 2), textcoords="offset points", ha='center', va='bottom', fontsize=6.0, fontweight='bold', color=HEX_PRIMARIA)
+        
+    ax_curva.set_title('FLUXO DE DESEMBOLSO MENSAL E CURVA S ACUMULADA', fontsize=9.5, fontweight='bold', color=HEX_PRIMARIA)
+    ax_curva.set_ylabel('Aporte (%)', fontsize=7.0, fontweight='bold', color=HEX_PRIMARIA)
+    ax_curva_line.set_ylabel('Acumulado (%)', fontsize=7.0, fontweight='bold', color=HEX_DESTAQUE)
     ax_curva.tick_params(axis='both', labelsize=7.0)
     ax_curva_line.tick_params(axis='both', labelsize=7.0)
     ax_curva_line.set_ylim(0, 115)
@@ -152,134 +135,200 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     plt.close(fig2)
     buf2.seek(0)
     
-    return buf1, buf2, grouped
+    return buf1, buf2
 
-# 4. GERADOR DE PDF MULTIPÁGINAS (2 PÁGINAS)
-def gerar_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2):
+# 4. GERADOR DO DOSSIÊ PDF DE 4 PÁGINAS
+def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, textColor=colors.HexColor('#1A365D'), spaceAfter=6)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8.5, textColor=colors.HexColor('#4A5568'), spaceAfter=10)
-    section_style = ParagraphStyle('SectionStyle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=10.5, textColor=colors.HexColor('#2C5282'), spaceBefore=8, spaceAfter=4)
-    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#2D3748'))
+    
+    title_cover = ParagraphStyle('CoverTitle', fontName='Helvetica-Bold', fontSize=20, leading=24, textColor=COR_PRIMARIA, alignment=1, spaceAfter=10)
+    sub_cover = ParagraphStyle('CoverSub', fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=COR_DESTAQUE, alignment=1, spaceAfter=20)
+    
+    h1_style = ParagraphStyle('H1Style', fontName='Helvetica-Bold', fontSize=14, leading=17, textColor=COR_PRIMARIA, spaceAfter=4)
+    h2_style = ParagraphStyle('H2Style', fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COR_DESTAQUE, spaceBefore=8, spaceAfter=4)
+    body = ParagraphStyle('Body', fontName='Helvetica', fontSize=8, leading=10.5, textColor=COR_TEXTO)
+    body_bold = ParagraphStyle('BodyBold', fontName='Helvetica-Bold', fontSize=8, leading=10.5, textColor=COR_TEXTO)
     
     elements = []
     
-    # ------------------ PÁGINA 1: PROPOSTA COMERCIAL & EAP ------------------
-    elements.append(Paragraph("PROPOSTA COMERCIAL PRELIMINAR — LIGHT STEEL FRAME", title_style))
-    elements.append(Paragraph("SISTEMA DE ENGENHARIA E ORÇAMENTAÇÃO AUTOMATIZADA (V2.0)", subtitle_style))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=10))
+    # ==================== PÁGINA 1: CAPA INSTITUCIONAL ====================
+    elements.append(HRFlowable(width="100%", thickness=3.5, color=COR_DESTAQUE, spaceAfter=15))
     
-    dados_cliente = [
-        [Paragraph(f"<b>CLIENTE:</b> {cliente}", body_style), Paragraph(f"<b>LOCAL:</b> {local}", body_style)],
-        [Paragraph(f"<b>ÁREA CONSTRUÍDA TOTAL:</b> {area_m2:,.2f} M²", body_style), Paragraph(f"<b>ÁREA FUNDAÇÃO:</b> {area_fundacao_m2:,.2f} M² ({tipo_fundacao})", body_style)],
-        [Paragraph(f"<b>PADRÃO ACABAMENTO:</b> {padrao}", body_style), Paragraph(f"<b>PRAZO PREVISTO DA OBRA:</b> {prazo_meses} MESES", body_style)]
+    # CHECAR LOGO
+    if os.path.exists("logo.png"):
+        elements.append(Image("logo.png", width=2.5*inch, height=1.0*inch))
+    else:
+        elements.append(Paragraph("AMÂNCIO", ParagraphStyle('LogoTxt', fontName='Helvetica-Bold', fontSize=34, textColor=COR_PRIMARIA, alignment=1)))
+        elements.append(Paragraph("CONSTRUTORA INTELIGENTE", ParagraphStyle('SubLogoTxt', fontName='Helvetica-Bold', fontSize=10, textColor=COR_PRIMARIA, alignment=1, spaceAfter=15)))
+    
+    elements.append(Spacer(1, 15))
+    elements.append(HRFlowable(width="35%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=25))
+    
+    elements.append(Paragraph("PROPOSTA COMERCIAL PRELIMINAR", title_cover))
+    elements.append(Paragraph("ENGENHARIA E EDIFICAÇÕES EM LIGHT STEEL FRAME", sub_cover))
+    
+    elements.append(Spacer(1, 15))
+    
+    info_capa = [
+        [Paragraph("<b>PROJETO / CLIENTE:</b>", body_bold), Paragraph(f"{cliente.upper()}", body)],
+        [Paragraph("<b>LOCALIZAÇÃO:</b>", body_bold), Paragraph(f"{local.upper()}", body)],
+        [Paragraph("<b>ÁREA CONSTRUÍDA TOTAL:</b>", body_bold), Paragraph(f"{area_m2:,.2f} M²", body)],
+        [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
+        [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
+        [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.0 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
-    t_cliente = Table(dados_cliente, colWidths=[270, 270])
-    t_cliente.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EDF2F7')),
-        ('PADDING', (0,0), (-1,-1), 5),
-        ('BOX', (0,0), (-1,-1), 0.8, colors.HexColor('#CBD5E0')),
+    t_capa = Table(info_capa, colWidths=[160, 300])
+    t_capa.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), COR_FUNDO),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+        ('PADDING', (0,0), (-1,-1), 6.5),
     ]))
-    elements.append(t_cliente)
+    elements.append(t_capa)
+    
+    elements.append(Spacer(1, 30))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_PRIMARIA, spaceAfter=8))
+    elements.append(Paragraph("AMÂNCIO CONSTRUTORA INTELIGENTE — INDUSTRIALIZAÇÃO E ALTA ENGENHARIA", ParagraphStyle('FootCapa', fontName='Helvetica-Bold', fontSize=7.5, textColor=COR_PRIMARIA, alignment=1)))
+    
+    elements.append(PageBreak())
+    
+    # ==================== PÁGINA 2: SUMÁRIO & INSTITUCIONAL ====================
+    elements.append(Paragraph("SUMÁRIO ANALÍTICO & APRESENTAÇÃO INSTITUCIONAL", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
+    
+    elements.append(Paragraph("1. ESTRUTURA DO DOSSIÊ", h2_style))
+    sumario_data = [
+        [Paragraph("<b>SEÇÃO</b>", body_bold), Paragraph("<b>DESCRIÇÃO DO CONTEÚDO</b>", body_bold), Paragraph("<b>PÁG.</b>", body_bold)],
+        [Paragraph("01", body), Paragraph("Capa Comercial Institucional e Dados do Cliente", body), Paragraph("01", body)],
+        [Paragraph("02", body), Paragraph("Sumário, Apresentação da Amâncio e Vantagens da Engenharia LSF", body), Paragraph("02", body)],
+        [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada (17 Itens)", body), Paragraph("03", body)],
+        [Paragraph("04", body), Paragraph("Dashboards Executivos: Macro-Grupos, Cronograma e Curva S", body), Paragraph("04", body)]
+    ]
+    t_sumario = Table(sumario_data, colWidths=[40, 420, 40])
+    t_sumario.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), COR_PRIMARIA),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0,0), (-1,-1), 4.5),
+    ]))
+    elements.append(t_sumario)
+    
     elements.append(Spacer(1, 8))
+    elements.append(Paragraph("2. SOBRE A AMÂNCIO CONSTRUTORA INTELIGENTE", h2_style))
+    p_inst = "A <b>AMÂNCIO Construtora Inteligente</b> é especializada na engenharia e execução de edificações de alto desempenho utilizando o sistema <b>Light Steel Frame (LSF)</b>. Combinamos tecnologia de ponta, processos industrializados, rigor técnico de projeto e gestão transparente para entregar obras com máxima precisão, sem desperdícios e em prazos até 60% menores que a construção convencional."
+    elements.append(Paragraph(p_inst, body))
     
-    elements.append(Paragraph("1. RESUMO EXECUTIVO DO ORÇAMENTO", section_style))
+    elements.append(Spacer(1, 8))
+    elements.append(Paragraph("3. DIFERENCIAIS DA ENGENHARIA EM LIGHT STEEL FRAME", h2_style))
+    lsf_diffs = [
+        [Paragraph("• <b>VELOCIDADE E PREVISIBILIDADE:</b>", body_bold), Paragraph("Cronograma rígido e industrializado, imune a atrasos de alvenaria convencional.", body)],
+        [Paragraph("• <b>DESEMPENHO TÉRMICO E ACÚSTICO:</b>", body_bold), Paragraph("Isolamento multicamadas superior, garantindo conforto térmico e eficiência energética.", body)],
+        [Paragraph("• <b>PRECISÃO MILIMÉTRICA:</b>", body_bold), Paragraph("Estrutura em aço galvanizado Z275 engenheirado, eliminando desvios e retrabalhos.", body)],
+        [Paragraph("• <b>SUSTENTABILIDADE E OBRA LIMPA:</b>", body_bold), Paragraph("Redução drástica de entulho, consumo de água mínimo e materiais 100% recicláveis.", body)]
+    ]
+    t_lsf = Table(lsf_diffs, colWidths=[170, 330])
+    t_lsf.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), COR_FUNDO),
+        ('PADDING', (0,0), (-1,-1), 5.5),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+    ]))
+    elements.append(t_lsf)
     
+    elements.append(PageBreak())
+    
+    # ==================== PÁGINA 3: PROPOSTA FINANCEIRA & EAP ====================
+    elements.append(Paragraph("PROPOSTA FINANCEIRA & DETALHAMENTO DE CUSTOS", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
+    
+    elements.append(Paragraph("4. RESUMO EXECUTIVO DO ORÇAMENTO", h2_style))
     tot_mat = df["CUSTO_MAT_FINAL"].sum()
     tot_mo = df["CUSTO_MO_FINAL"].sum()
     
     resumo_data = [
-        [Paragraph("<b>VALOR TOTAL ESTIMADO:</b>", body_style), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_style)],
-        [Paragraph("<b>VALOR ESTIMADO POR M² CONSTRUÍDO:</b>", body_style), Paragraph(f"<b>R$ {valor_m2:,.2f} / M²</b>", body_style)]
+        [Paragraph("<b>VALOR TOTAL ESTIMADO DO PROJETO:</b>", body_bold), Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold)],
+        [Paragraph("<b>VALOR ESTIMADO POR M² CONSTRUÍDO:</b>", body_bold), Paragraph(f"<b>R$ {valor_m2:,.2f} / M²</b>", body_bold)],
+        [Paragraph("<b>SUBTOTAL MATERIAIS COM BDI:</b>", body), Paragraph(f"R$ {tot_mat:,.2f} ({ (tot_mat/valor_total)*100:.1f}%)", body)],
+        [Paragraph("<b>SUBTOTAL MÃO DE OBRA COM BDI:</b>", body), Paragraph(f"R$ {tot_mo:,.2f} ({ (tot_mo/valor_total)*100:.1f}%)", body)]
     ]
-    if exibir_separado:
-        resumo_data.append([Paragraph("<b>TOTAL MATERIAIS COM BDI:</b>", body_style), Paragraph(f"R$ {tot_mat:,.2f} ({ (tot_mat/valor_total)*100:.1f}%)", body_style)])
-        resumo_data.append([Paragraph("<b>TOTAL MÃO DE OBRA COM BDI:</b>", body_style), Paragraph(f"R$ {tot_mo:,.2f} ({ (tot_mo/valor_total)*100:.1f}%)", body_style)])
-
-    t_resumo = Table(resumo_data, colWidths=[200, 340])
+    t_resumo = Table(resumo_data, colWidths=[220, 280])
     t_resumo.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EBF8FF')),
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#2B6CB0')),
-        ('PADDING', (0,0), (-1,-1), 5),
-        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor('#3182CE')),
+        ('PADDING', (0,0), (-1,-1), 4.5),
+        ('BOX', (0,0), (-1,-1), 1.2, COR_PRIMARIA),
     ]))
     elements.append(t_resumo)
-    elements.append(Spacer(1, 8))
     
-    elements.append(Paragraph("2. DETALHAMENTO POR SUBSISTEMA CONSTRUTIVO (EAP)", section_style))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("5. EAP DETALHADA POR SUBSISTEMA CONSTRUTIVO (17 ITENS)", h2_style))
     
     if exibir_separado:
         data_table = [[
-            Paragraph("<b>SUBSISTEMA</b>", body_style), 
-            Paragraph("<b>MATERIAL (R$)</b>", body_style), 
-            Paragraph("<b>MÃO DE OBRA (R$)</b>", body_style), 
-            Paragraph("<b>TOTAL (R$)</b>", body_style), 
-            Paragraph("<b>PART. (%)</b>", body_style)
+            Paragraph("<b>SUBSISTEMA</b>", body_bold), 
+            Paragraph("<b>MATERIAL (R$)</b>", body_bold), 
+            Paragraph("<b>MÃO DE OBRA (R$)</b>", body_bold), 
+            Paragraph("<b>TOTAL (R$)</b>", body_bold), 
+            Paragraph("<b>PART. (%)</b>", body_bold)
         ]]
         for idx, row in df.iterrows():
             data_table.append([
-                Paragraph(str(row["SUBSISTEMA"]), body_style),
+                Paragraph(str(row["SUBSISTEMA"]), body),
                 f"R$ {row['CUSTO_MAT_FINAL']:,.2f}",
                 f"R$ {row['CUSTO_MO_FINAL']:,.2f}",
                 f"R$ {row['CUSTO_FINAL_COM_BDI']:,.2f}",
                 f"{row['PARTICIPACAO_PCT']:.1f}%"
             ])
         data_table.append([
-            Paragraph("<b>TOTAL GERAL</b>", body_style),
-            Paragraph(f"<b>R$ {tot_mat:,.2f}</b>", body_style),
-            Paragraph(f"<b>R$ {tot_mo:,.2f}</b>", body_style),
-            Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_style),
-            Paragraph("<b>100,0%</b>", body_style)
+            Paragraph("<b>TOTAL GERAL</b>", body_bold),
+            Paragraph(f"<b>R$ {tot_mat:,.2f}</b>", body_bold),
+            Paragraph(f"<b>R$ {tot_mo:,.2f}</b>", body_bold),
+            Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold),
+            Paragraph("<b>100,0%</b>", body_bold)
         ])
-        t_detalhes = Table(data_table, colWidths=[170, 95, 95, 105, 75])
+        t_detalhes = Table(data_table, colWidths=[165, 95, 95, 100, 45])
     else:
-        data_table = [[Paragraph("<b>SUBSISTEMA</b>", body_style), Paragraph("<b>VALOR COM BDI (R$)</b>", body_style), Paragraph("<b>PART. (%)</b>", body_style)]]
+        data_table = [[Paragraph("<b>SUBSISTEMA</b>", body_bold), Paragraph("<b>VALOR COM BDI (R$)</b>", body_bold), Paragraph("<b>PARTICIPAÇÃO (%)</b>", body_bold)]]
         for idx, row in df.iterrows():
             data_table.append([
-                Paragraph(str(row["SUBSISTEMA"]), body_style),
+                Paragraph(str(row["SUBSISTEMA"]), body),
                 f"R$ {row['CUSTO_FINAL_COM_BDI']:,.2f}",
                 f"{row['PARTICIPACAO_PCT']:.1f}%"
             ])
         data_table.append([
-            Paragraph("<b>TOTAL GERAL</b>", body_style),
-            Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_style),
-            Paragraph("<b>100,0%</b>", body_style)
+            Paragraph("<b>TOTAL GERAL</b>", body_bold),
+            Paragraph(f"<b>R$ {valor_total:,.2f}</b>", body_bold),
+            Paragraph("<b>100,0%</b>", body_bold)
         ])
-        t_detalhes = Table(data_table, colWidths=[280, 150, 110])
+        t_detalhes = Table(data_table, colWidths=[270, 140, 90])
 
     t_detalhes.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2B6CB0')),
+        ('BACKGROUND', (0,0), (-1,0), COR_PRIMARIA),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
-        ('PADDING', (0,0), (-1,-1), 2.8),
-        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EDF2F7')),
+        ('PADDING', (0,0), (-1,-1), 2.2),
+        ('BACKGROUND', (0,-1), (-1,-1), COR_FUNDO),
     ]))
     elements.append(t_detalhes)
     
-    # ------------------ PÁGINA 2: DASHBOARDS & PLANEJAMENTO ------------------
     elements.append(PageBreak())
     
-    elements.append(Paragraph("DASHBOARD EXECUTIVO & PLANO DE EXECUÇÃO DA OBRA", title_style))
-    elements.append(Paragraph("ANÁLISE DE COMPOSIÇÃO, CRONOGRAMA FÍSICO E FLUXO FINANCEIRO ACUMULADO", subtitle_style))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2B6CB0'), spaceAfter=8))
+    # ==================== PÁGINA 4: DASHBOARDS & CRONOGRAMA ====================
+    elements.append(Paragraph("DASHBOARDS EXECUTIVOS & FLUXO DE EXECUÇÃO", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
     
-    elements.append(Paragraph("3. DISTRIBUIÇÃO DE CUSTOS POR MACRO-ETAPAS", section_style))
-    elements.append(Image(buf1, width=6.2*inch, height=2.8*inch))
-    elements.append(Spacer(1, 6))
-    
-    elements.append(Paragraph("4. CRONOGRAMA FÍSICO-FINANCEIRO E CURVA S ACUMULADA", section_style))
-    elements.append(Image(buf2, width=6.2*inch, height=4.3*inch))
+    elements.append(Image(buf1, width=6.2*inch, height=2.7*inch))
+    elements.append(Spacer(1, 4))
+    elements.append(Image(buf2, width=6.2*inch, height=4.2*inch))
     
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
 
-# 5. FORMULÁRIO DE ENTRADA INTERATIVO
+# 5. FORMULÁRIO DE ENTRADA DO USUÁRIO
 with st.form("form_orcamento"):
-    st.write("### 📝 DADOS GERAIS DA OBRA")
+    st.write("### 📝 DADOS GERAIS DO PROJETO E CLIENTE")
     cliente = st.text_input("NOME DO CLIENTE / PROJETO:", value="RESIDENCIAL SILVA")
     local = st.text_input("LOCAL DA OBRA (CIDADE / UF):", value="JOINVILLE / SC")
     area_m2 = st.number_input("ÁREA TOTAL CONSTRUÍDA DA OBRA (M²):", min_value=10.0, max_value=5000.0, value=500.0, step=10.0)
@@ -295,9 +344,9 @@ with st.form("form_orcamento"):
     
     prazo_meses = st.slider("PRAZO ESTIMADO DE EXECUÇÃO DA OBRA (MESES):", min_value=3, max_value=12, value=6, step=1)
     
-    st.write("### ⚙️ FORMATO DE APRESENTAÇÃO E BDI")
+    st.write("### ⚙️ FORMATO DE EXIBIÇÃO E MARGEM BDI")
     opcao_exibicao = st.radio(
-        "COMO DESEJA EXIBIR OS VALORES NA TELA E NO PDF?",
+        "COMO DESEJA EXIBIR OS VALORES NA TELA E NO DOSSIÊ PDF?",
         ["JUNTOS (VALOR UNIFICADO)", "SEPARADOS (MATERIAL E MÃO DE OBRA)"],
         index=0
     )
@@ -305,10 +354,10 @@ with st.form("form_orcamento"):
     
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 CALCULAR E GERAR PROPOSTA E DASHBOARDS (V2.0)")
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.0)")
 
 if submitted:
-    st.success("✅ PROPOSTA V2.0 E DASHBOARDS PROCESSADOS COM SUCESSO!")
+    st.success("✅ DOSSIÊ COMERCIAL V3.0 GERADO COM SUCESSO!")
     
     df = carregar_dados_google_sheets()
     
@@ -348,7 +397,7 @@ if submitted:
     tot_mat_geral = df["CUSTO_MAT_FINAL"].sum()
     tot_mo_geral = df["CUSTO_MO_FINAL"].sum()
     
-    # METRICAS NO PAINEL
+    # METRICAS
     if exibir_separado:
         c1, c2, c3 = st.columns(3)
         c1.metric("VALOR TOTAL ESTIMADO", f"R$ {valor_total:,.2f}")
@@ -361,29 +410,30 @@ if submitted:
     
     st.markdown("---")
     
-    # GERAR GRÁFICOS DO DASHBOARD
-    buf1, buf2, grouped = gerar_graficos_dashboard(df, valor_total, prazo_meses)
+    # GERAR GRÁFICOS
+    buf1, buf2 = gerar_graficos_dashboard(df, valor_total, prazo_meses)
     
-    # GERAR PDF DE 2 PÁGINAS
-    pdf_bytes = gerar_pdf_bytes(
-        cliente, local, area_m2, area_fundacao_m2, tipo_fundacao.split(' ')[0], 
+    # GERAR PDF 4 PÁGINAS
+    pdf_bytes = gerar_dossie_pdf_bytes(
+        cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
         padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
     )
     
-    # BOTÃO DE DOWNLOAD
     st.download_button(
-        label="📥 BAIXAR RELATÓRIO EXECUTIVO E DASHBOARDS (PDF 2 PÁGINAS)",
+        label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF 4 PÁGINAS)",
         data=pdf_bytes,
-        file_name=f"RELATORIO_EXECUTIVO_{cliente.replace(' ', '_').upper()}.pdf",
+        file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
         mime="application/pdf"
     )
 
-    # VISUALIZAÇÃO NATIVA DOS DASHBOARDS E DA EAP NO STREAMLIT
-    with st.expander("👁️ CLIQUE AQUI PARA VER A PRÉ-VISUALIZAÇÃO COMPLETA DA PROPOSTA"):
-        st.markdown("### 📄 PÁGINA 1: EAP E VALORES DETALHADOS")
-        st.markdown(f"**Cliente:** {cliente.upper()} | **Local:** {local} | **Prazo:** {prazo_meses} meses")
-        st.info(f"💰 **VALOR TOTAL DO PROJETO:** R$ {valor_total:,.2f} (R$ {valor_m2:,.2f} / m²)")
+    with st.expander("👁️ VER PRÉ-VISUALIZAÇÃO DO DOSSIÊ NA TELA"):
+        st.markdown("### 📄 PÁGINA 1: CAPA INSTITUCIONAL AMÂNCIO")
+        st.info(f"PROPOSTA COMERCIAL: {cliente.upper()} | {local.upper()} | R$ {valor_total:,.2f}")
         
+        st.markdown("### 📄 PÁGINA 2: INSTITUCIONAL E DIFERENCIAIS LSF")
+        st.markdown("*Apresentação da Amâncio Construtora Inteligente e Vantagens do Steel Frame.*")
+        
+        st.markdown("### 📄 PÁGINA 3: PROPOSTA FINANCEIRA E EAP")
         if exibir_separado:
             df_preview = df[["SUBSISTEMA", "CUSTO_MAT_FINAL", "CUSTO_MO_FINAL", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
             df_preview.columns = ["Subsistema", "Material (R$)", "Mão de Obra (R$)", "Total com BDI (R$)", "Part. (%)"]
@@ -401,7 +451,6 @@ if submitted:
                 "Part. (%)": "{:.1f}%"
             }), use_container_width=True)
             
-        st.markdown("---")
-        st.markdown("### 📊 PÁGINA 2: DASHBOARDS EXECUTIVOS E PLANEJAMENTO")
-        st.image(buf1, caption="Distribuição de Custos por Macro-Etapas", use_column_width=True)
-        st.image(buf2, caption="Cronograma Físico (Gantt) e Fluxo Financeiro (Curva S)", use_column_width=True)
+        st.markdown("### 📊 PÁGINA 4: DASHBOARDS EXECUTIVOS AMÂNCIO")
+        st.image(buf1, caption="Composição Financeira por Macro-Grupos", use_column_width=True)
+        st.image(buf2, caption="Cronograma Físico de Execução e Curva S de Desembolso", use_column_width=True)
