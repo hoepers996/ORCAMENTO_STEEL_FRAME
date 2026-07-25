@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. CONFIGURAÇÕES GERAIS E CORES
 # ==========================================
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V8.1", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V8.2", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -33,7 +33,57 @@ URL_VALORES = "https://docs.google.com/spreadsheets/d/1kA4NHJ8VU3eDnipJ0ADArTWzm
 URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
 # ==========================================
-# 2. CARREGAMENTO DE DADOS
+# DICIONÁRIOS DE ESPECIFICAÇÕES TÉCNICAS
+# ==========================================
+DESC_CATS = {
+    'fund': {
+        'titulo': '1. FUNDAÇÃO E INFRAESTRUTURA',
+        'BAIXO': '<b>Leve / Básica:</b> Terreno plano e firme. Utiliza Radier simples de concreto armado com espessura padrão, sem necessidade de estacas profundas ou muros de arrimo complexos.',
+        'MEDIO': '<b>Moderada / Padrão:</b> Terreno com leve declive ou resistência mediana. Exige Radier reforçado com vigas de bordo ou estacas rasas de apoio.',
+        'ALTO': '<b>Pesada / Complexa:</b> Terreno com desnível acentuado ou solo frágil. Demanda estacas profundas, blocos de coroamento, vigas baldrame robustas e/ou muros de contenção estruturais.'
+    },
+    'estr': {
+        'titulo': '2. ESTRUTURA LSF E COBERTURA',
+        'BAIXO': '<b>Simples / Básica:</b> Arquitetura predominante retangular com vãos curtos. Otimiza o consumo de aço com treliças padronizadas e telhado com beirais convencionais.',
+        'MEDIO': '<b>Moderada / Padrão:</b> Arquitetura residencial típica. Contempla platibandas, vãos moderados (até 5m livres) e mezaninos residenciais.',
+        'ALTO': '<b>Complexa / Alto Padrão:</b> Projetos arrojados com grandes vãos livres, balanços estruturais, pé-direito duplo e fachada imponente. Exige perfis de aço com maior espessura e vigas treliçadas robustas.'
+    },
+    'inst': {
+        'titulo': '3. INSTALAÇÕES (HIDRO, ELÉTRICA E CLIMA)',
+        'BAIXO': '<b>Básica / Convencional:</b> Quantidade padrão de pontos elétricos/iluminação, distribuição hidráulica simples e infraestrutura para ar-condicionado focada apenas nos dormitórios.',
+        'MEDIO': '<b>Moderada / Padrão:</b> Circuitos elétricos amplos e segmentados, água quente em torneiras (monocomando), rede de dados estruturada e infra de ar-condicionado em toda a edificação.',
+        'ALTO': '<b>Alta Tecnologia:</b> Altíssima densidade de tomadas, quadros dedicados para automação residencial, aquecimento de piso, pressurização potente e infraestrutura para ar dutado.'
+    },
+    'acab': {
+        'titulo': '4. ACABAMENTOS E REVESTIMENTOS',
+        'BAIXO': '<b>Comum / Comercial:</b> Revestimentos e pisos cerâmicos padronizados, esquadrias de alumínio em linha básica, portas lisas e pintura convencional.',
+        'MEDIO': '<b>Alto Padrão:</b> Porcelanatos padrão (ex: 80x80cm), esquadrias de alumínio Linha Gold/Suprema, pintura acrílica premium e louças/metais de alta qualidade e durabilidade.',
+        'ALTO': '<b>Altíssimo Luxo:</b> Pedras naturais (Mármores/Granitos), porcelanatos de grandes formatos (ex: 120x120cm+), esquadrias de PVC acústicas e fechaduras eletrônicas / acabamentos premium.'
+    }
+}
+
+DESC_INSUMOS = {
+    '01': "Abrange a preparação inicial do terreno, ligações provisórias (padrão de água e energia), locação topográfica, limpeza do lote e fechamento frontal com tapumes.",
+    '02': "Contempla os custos gerenciais indiretos: aprovações, emissão de ARTs (Anotação de Responsabilidade Técnica), taxas de prefeitura e remuneração da equipe de gestão (engenheiro e mestre de obras).",
+    '03': "Envolve a montagem da infraestrutura de apoio à equipe de construção, como instalação de contêineres/barracão, banheiro químico, refeitório provisório e local seguro para armazenagem de materiais.",
+    '04': "Custos logísticos com fretes, caçambas de descarte durante a execução, e locação de maquinários diários (betoneiras, rompedores, andaimes e escoramentos).",
+    '05': "Composição da base de contato com o solo que receberá a montagem LSF. Inclui concreto usinado (FCK adequado), armaduras (malhas pop ou treliças), lona plástica preta, fôrmas, e possíveis estacas escavadas/brocas.",
+    '06': "O esqueleto principal e portante da edificação. Constituído 100% por perfis formados a frio em aço galvanizado (revestimento mínimo Z275), parafusos estruturais autoperfurantes, fitas de ancoragem tensionadas e chumbadores químicos/mecânicos.",
+    '07': "Sistema multicamadas que atua como as 'paredes' do projeto. Compreende placas estruturais OSB, membrana hidrófuga respirável (ex: Tyvek), isolamento termoacústico interno (Lã de Vidro ou PET), placas cimentícias (face externa), chapas de gesso acartonado/Drywall (face interna) e fitas/massas para tratamento de juntas.",
+    '08': "Composição superior da obra, incluindo estrutura do telhado (tesouras em LSF), mantas de subcobertura, telhas escolhidas (shingle, metálica termoacústica ou fibrocimento), além da funilaria completa (calhas, rufos e pingadeiras).",
+    '09': "Etapa de blindagem contra umidade. Aplicação de mantas asfálticas, fitas butílicas de alta adesão e impermeabilizantes líquidos/cimentícios nas áreas úmidas (banheiros/lavanderia) e nas faixas de contato do radier.",
+    '10': "Malha de fluidos da edificação. Tubulações e conexões de água fria e quente (em PVC, PPR ou PEX termofundido), tubos de esgoto, caixas sifonadas, ralos invisíveis/lineares, registros de gaveta/pressão e caixas d'água.",
+    '11': "Sistema de energia e dados. Inclui eletrodutos flexíveis corrugados (anti-chama) e rígidos, caixas de passagem e derivação, cabeamento em cobre flexível, disjuntores DIN, DR, quadros de distribuição (QDC) e hastes para malha de aterramento.",
+    '12': "Infraestrutura frigorígena (tubulação de cobre para os splits), revestimento de isolamento térmico (esponjoso), cabeamento PP de comando entre unidades e sistema de drenos em PVC para escoamento de condensado.",
+    '13': "Tratamento de embelezamento de paredes e forros. Inclui aplicação de massas (corrida/acrílica), lixamento, tintas premium, texturas/grafiatos externos, assentamento de revestimentos cerâmicos, argamassas colantes (ACII/ACIII) e rejuntamentos.",
+    '14': "Preparo da base (contrapiso leve de regularização), aplicação de primer, assentamento de pisos (porcelanatos, vinílicos ou laminados), além de instalação de rodapés e soleiras/baguetes em pedra.",
+    '15': "Fechamentos de vãos. Esquadrias externas (janelas e portas em alumínio ou PVC), portas internas prontas (madeira estruturada), vidros (temperados e laminados) e todo o conjunto de ferragens e fechaduras.",
+    '16': "Tratamento final da área externa do lote. Calçadas e pavimentação externa, preparação de terra/grama para paisagismo básico, muros de divisa, pintura externa e instalação de portões.",
+    '17': "Remoção fina de detritos, contratação de limpeza especializada pós-obra (higienização de vidros, polimento de porcelanatos, desinfecção de louças e metais) preparando o imóvel para a entrega das chaves ao cliente."
+}
+
+# ==========================================
+# 2. CARREGAMENTO DE DADOS (DB ABSOLUTO)
 # ==========================================
 @st.cache_data(ttl=15)
 def carregar_valores():
@@ -135,7 +185,6 @@ def calcular_linha_do_tempo(g, dur_w, inic_w):
 def plot_gantt(g, m_prazo, val_tot, dur_semanas, inic_semanas):
     starts_m, dur_m, _ = calcular_linha_do_tempo(g, dur_semanas, inic_semanas)
     fig_g = plt.figure(figsize=(9, 2.5), facecolor=HEX_FUNDO); ax_g = fig_g.add_subplot(111)
-    
     if val_tot == 0: 
         ax_g.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_g.axis('off')
     else:
@@ -152,7 +201,6 @@ def plot_gantt(g, m_prazo, val_tot, dur_semanas, inic_semanas):
 def plot_curva_s(g, m_prazo, val_tot, dur_semanas, inic_semanas):
     starts_m, dur_m, _ = calcular_linha_do_tempo(g, dur_semanas, inic_semanas)
     fig_c = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO); ax_c = fig_c.add_subplot(111)
-    
     if val_tot == 0: 
         ax_c.text(0.5, 0.5, "SEM ITENS NO ESCOPO", ha='center', va='center', color=HEX_PRIMARIA, fontweight='bold'); ax_c.axis('off')
     else:
@@ -194,8 +242,9 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     
     h1 = ParagraphStyle('H1', fontName='Helvetica-Bold', fontSize=13, textColor=COR_PRIMARIA, spaceAfter=8)
     h2 = ParagraphStyle('H2', fontName='Helvetica-Bold', fontSize=10, textColor=COR_DESTAQUE, spaceBefore=8, spaceAfter=4)
+    h3 = ParagraphStyle('H3', fontName='Helvetica-Bold', fontSize=9, textColor=COR_PRIMARIA, spaceBefore=8, spaceAfter=2)
     b_b = ParagraphStyle('BB', fontName='Helvetica-Bold', fontSize=8.5, textColor=COR_TEXTO)
-    b_n = ParagraphStyle('BN', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)
+    b_n = ParagraphStyle('BN', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO, alignment=4) # Justificado
     b_w = ParagraphStyle('BW', fontName='Helvetica-Bold', fontSize=8.5, textColor=colors.white)
     
     # --- CAPA ---
@@ -214,17 +263,19 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     elem.append(Paragraph("PROPOSTA COMERCIAL PARAMETRIZADA", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=18, textColor=COR_PRIMARIA, alignment=1, spaceAfter=5)))
     elem.append(Paragraph("ENGENHARIA E EDIFICAÇÕES EM LIGHT STEEL FRAME", ParagraphStyle('ST', fontName='Helvetica-Bold', fontSize=11, textColor=COR_DESTAQUE, alignment=1, spaceAfter=25)))
     
-    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), b_n)], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", b_n)], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", b_n)], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES ({sem_prazo} Semanas)", b_n)], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V8.1 — DOSSIÊ DE ENGENHARIA", b_n)]]
+    d_capa = [[Paragraph("<b>PROJETO / CLIENTE:</b>", b_b), Paragraph(cli.upper(), ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", b_b), Paragraph(f"{af2:,.2f} M²", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>ÁREA DE COBERTURA:</b>", b_b), Paragraph(f"{ac2:,.2f} M²", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES ({sem_prazo} Semanas)", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V8.2 — DOSSIÊ DE ENGENHARIA", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))]]
     tc = Table(d_capa, colWidths=[150, 300]); tc.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')), ('PADDING', (0,0), (-1,-1), 6)]))
     elem.append(tc); elem.append(Spacer(1, 30)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_PRIMARIA, spaceAfter=8)); elem.append(Paragraph("AMÂNCIO CONSTRUTORA INTELIGENTE", ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7.5, textColor=COR_PRIMARIA, alignment=1))); elem.append(PageBreak())
     
-    # --- RESUMO E CATEGORIAS ---
+    # --- RESUMO FINANCEIRO ---
     elem.append(Paragraph("RESUMO FINANCEIRO E DEFINIÇÕES DE PROJETO", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
     aviso = "<font color='white'><b>NOTA TÉCNICA/COMERCIAL:</b> Este documento é um balizamento paramétrico de mercado. Itens 'NÃO INCLUSOS' servem para visão global da obra e planejamento do cliente. Valores exatos exigem projetos executivos.</font>"
     t_aviso = Table([[Paragraph(aviso, b_b)]], colWidths=[450]); t_aviso.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#C53030')), ('PADDING', (0,0), (-1,-1), 6)])); elem.append(t_aviso); elem.append(Spacer(1, 10))
 
+    txt_m_fund = {"BAIXO": "BÁSICA", "MEDIO": "PADRÃO", "ALTO": "COMPLEXA/LUXO"}
+    
     elem.append(Paragraph("CLASSIFICAÇÃO PARAMÉTRICA DA OBRA", h2))
-    d_cat = [[Paragraph("<b>GRUPO CONSTRUTIVO</b>", b_w), Paragraph("<b>PADRÃO / COMPLEXIDADE DEFINIDA</b>", b_w)], [Paragraph("Fundação e Infra", b_b), Paragraph(conf_cats['fund'], b_n)], [Paragraph("Estrutura LSF", b_b), Paragraph(conf_cats['estr'], b_n)], [Paragraph("Instalações Gerais", b_b), Paragraph(conf_cats['inst'], b_n)], [Paragraph("Acabamentos", b_b), Paragraph(conf_cats['acab'], b_n)]]
+    d_cat = [[Paragraph("<b>GRUPO CONSTRUTIVO</b>", b_w), Paragraph("<b>PADRÃO / COMPLEXIDADE DEFINIDA</b>", b_w)], [Paragraph("Fundação e Infra", b_b), Paragraph(txt_m_fund[conf_cats['fund']], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("Estrutura LSF", b_b), Paragraph(txt_m_fund[conf_cats['estr']], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("Instalações Gerais", b_b), Paragraph(txt_m_fund[conf_cats['inst']], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))], [Paragraph("Acabamentos", b_b), Paragraph(txt_m_fund[conf_cats['acab']], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))]]
     t_cat = Table(d_cat, colWidths=[150, 310]); t_cat.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 4)])); elem.append(t_cat); elem.append(Spacer(1, 15))
     
     elem.append(Paragraph("SÍNTESE DE CUSTOS", h2))
@@ -233,37 +284,37 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
 
     # --- EAP 01: MERCADO ---
     elem.append(Paragraph("EAP 01: ESTRUTURA ANALÍTICA GLOBAL DA OBRA (MERCADO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-    elem.append(Paragraph("<i>Visão geral e estimativa de todos os subsistemas construtivos para execução plena do projeto.</i>", b_n)); elem.append(Spacer(1,5))
+    elem.append(Paragraph("<i>Visão geral e estimativa de todos os subsistemas construtivos para execução plena do projeto.</i>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))); elem.append(Spacer(1,5))
     d_tab_m = [[Paragraph("<b>ITEM / SUBSISTEMA CONSTRUTIVO</b>", b_w), Paragraph("<b>STATUS CONTRATO</b>", b_w), Paragraph("<b>VALOR ESTIMADO (R$)</b>", b_w)]]
     for i, r in df.iterrows():
         s = r["STATUS"]
         if "NÃO" in s: sf = f'<font color="{HEX_DESTAQUE}">{s}</font>'
         elif "COMPLETO" in s: sf = f'<font color="{HEX_PRIMARIA}"><b>{s}</b></font>'
         else: sf = f'<font color="{HEX_SECUNDARIA}">{s}</font>'
-        d_tab_m.append([Paragraph(r["SUBSISTEMA"], b_n), Paragraph(sf, b_n), f"R$ {r['CUSTO_MERCADO']:,.2f}"])
+        d_tab_m.append([Paragraph(r["SUBSISTEMA"], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)), Paragraph(sf, ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)), f"R$ {r['CUSTO_MERCADO']:,.2f}"])
     d_tab_m.append([Paragraph("<b>TOTAL GERAL ESTIMADO (MERCADO)</b>", b_b), "", Paragraph(f"<b>R$ {v_mer:,.2f}</b>", b_b)])
     t_m = Table(d_tab_m, colWidths=[200, 140, 120]); t_m.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_PRIMARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3), ('BACKGROUND', (0,-1), (-1,-1), COR_FUNDO)])); elem.append(t_m); elem.append(PageBreak())
 
     # --- DASHBOARDS MERCADO ---
     if exibir_graficos:
         elem.append(Paragraph("DASHBOARDS GLOBAIS (100% DA OBRA)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS</b>", b_n))
+        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gm_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
-        elem.append(Paragraph("<b>2. CRONOGRAMA DE EXECUÇÃO FÍSICA (GANTT)</b>", b_n))
+        elem.append(Paragraph("<b>2. CRONOGRAMA DE EXECUÇÃO FÍSICA (GANTT)</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gm_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
-        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO FINANCEIRO</b>", b_n))
+        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO FINANCEIRO</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gm_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
     # --- EAP 02: CONTRATO ---
     elem.append(Paragraph("EAP 02: O SEU CONTRATO AMÂNCIO (FILTRADO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-    elem.append(Paragraph("<i>Detalhamento exclusivo dos itens aprovados e selecionados para o escopo da construtora.</i>", b_n)); elem.append(Spacer(1,5))
+    elem.append(Paragraph("<i>Detalhamento exclusivo dos itens aprovados e selecionados para o escopo da construtora.</i>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))); elem.append(Spacer(1,5))
     d_tab_c = [[Paragraph("<b>ITEM INCLUSO</b>", b_w), Paragraph("<b>MATERIAIS</b>", b_w), Paragraph("<b>MÃO DE OBRA</b>", b_w), Paragraph("<b>TOTAL ITEM</b>", b_w)]]
     df_filtrado = df[df["CUSTO_CONTRATO"] > 0]
     if df_filtrado.empty:
-        d_tab_c.append([Paragraph("Nenhum item selecionado para o contrato.", b_n), "-", "-", "-"])
+        d_tab_c.append([Paragraph("Nenhum item selecionado para o contrato.", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)), "-", "-", "-"])
     else:
         for i, r in df_filtrado.iterrows():
-            d_tab_c.append([Paragraph(r["SUBSISTEMA"], b_n), f"R$ {r['MAT_CONTRATO']:,.2f}", f"R$ {r['MO_CONTRATO']:,.2f}", f"R$ {r['CUSTO_CONTRATO']:,.2f}"])
+            d_tab_c.append([Paragraph(r["SUBSISTEMA"], ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)), f"R$ {r['MAT_CONTRATO']:,.2f}", f"R$ {r['MO_CONTRATO']:,.2f}", f"R$ {r['CUSTO_CONTRATO']:,.2f}"])
     d_tab_c.append([Paragraph("<b>TOTAL DO SEU CONTRATO</b>", b_b), Paragraph(f"<b>R$ {t_mat_c:,.2f}</b>", b_b), Paragraph(f"<b>R$ {t_mo_c:,.2f}</b>", b_b), Paragraph(f"<b>R$ {v_con:,.2f}</b>", b_b)])
     t_c = Table(d_tab_c, colWidths=[200, 85, 85, 90]); t_c.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3), ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#EBF8FF'))])); elem.append(t_c); elem.append(PageBreak())
 
@@ -271,7 +322,7 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     if v_con > 0:
         elem.append(Paragraph("PROPOSTA DE PAGAMENTO (FLUXO DO CONTRATO)", h1))
         elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-        elem.append(Paragraph("<i>Previsão de faturamento mensal baseada no valor total do escopo selecionado para o contrato (R$).</i>", b_n))
+        elem.append(Paragraph("<i>Previsão de faturamento mensal baseada no valor total do escopo selecionado para o contrato (R$).</i>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Spacer(1,5))
         
         d_pag = [[Paragraph("<b>PARCELA / MÊS</b>", b_w), Paragraph("<b>PERCENTUAL (%)</b>", b_w), Paragraph("<b>VALOR DA PARCELA (R$)</b>", b_w)]]
@@ -294,30 +345,93 @@ def gerar_pdf(cli, loc, am2, af2, ac2, m_prazo, sem_prazo, conf_cats, df, v_mer,
     # --- DASHBOARDS CONTRATO ---
     if exibir_graficos:
         elem.append(Paragraph("DASHBOARDS DO CONTRATO (ESCOPO AMÂNCIO)", h1)); elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=10))
-        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS DO CONTRATO</b>", b_n))
+        elem.append(Paragraph("<b>1. COMPOSIÇÃO DE CUSTOS DO CONTRATO</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gc_r, width=5.5*inch, height=2.44*inch)); elem.append(Spacer(1, 10))
-        elem.append(Paragraph("<b>2. CRONOGRAMA DE ATUAÇÃO (GANTT)</b>", b_n))
+        elem.append(Paragraph("<b>2. CRONOGRAMA DE ATUAÇÃO (GANTT)</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gc_g, width=6.6*inch, height=1.83*inch)); elem.append(Spacer(1, 10))
-        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DA OBRA (FÍSICO)</b>", b_n))
+        elem.append(Paragraph("<b>3. FLUXO DE DESEMBOLSO DA OBRA (FÍSICO)</b>", ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)))
         elem.append(Image(gc_c, width=6.6*inch, height=2.3*inch)); elem.append(PageBreak())
 
-    # --- MEMORIAL ---
-    elem.append(Paragraph("CATÁLOGO DE ESCOPO E MEMORIAL", h1))
-    if df_m.empty: elem.append(Paragraph("Sem itens de memorial.", b_n))
-    else:
-        col_it = 'ITEM' if 'ITEM' in df_m.columns else df_m.columns[2]
-        col_ob = 'OBSERVACAO' if 'OBSERVACAO' in df_m.columns else (df_m.columns[4] if len(df_m.columns)>4 else df_m.columns[-1])
-        for i, r in df.iterrows():
-            pref = str(r["SUBSISTEMA"])[:2]; f = df_m[df_m['CODIGO'] == pref]
+    # --- NOVO: ESPECIFICAÇÕES TÉCNICAS E MEMORIAL ---
+    elem.append(Paragraph("ESPECIFICAÇÕES TÉCNICAS E MEMORIAL", h1))
+    elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
+    
+    # 1. EXPLICAÇÃO DAS CATEGORIAS
+    elem.append(Paragraph("1. PARÂMETROS DE ENGENHARIA E COMPLEXIDADE", h2))
+    elem.append(Paragraph("Abaixo apresentamos as opções de padrão e complexidade técnica para cada grupo construtivo. A opção <font color='#E83F25'><b>destacada em Laranja</b></font> indica a escolha aplicada para o dimensionamento exclusivo desta proposta.", b_n))
+    elem.append(Spacer(1, 10))
+    
+    # Renderizar blocos das categorias
+    for key in ['fund', 'estr', 'inst', 'acab']:
+        elem.append(Paragraph(DESC_CATS[key]['titulo'], h3))
+        cat_selecionada = conf_cats[key] # "BAIXO", "MEDIO" ou "ALTO"
+        
+        for nivel in ['BAIXO', 'MEDIO', 'ALTO']:
+            if nivel == cat_selecionada:
+                # Destaque
+                txt = f"<font color='{HEX_DESTAQUE}'>✓ {DESC_CATS[key][nivel]}</font>"
+                elem.append(Paragraph(txt, b_n))
+            else:
+                # Normal/Cinza
+                txt = f"<font color='#718096'>{DESC_CATS[key][nivel]}</font>"
+                elem.append(Paragraph(txt, b_n))
+        elem.append(Spacer(1, 8))
+    
+    elem.append(PageBreak())
+
+    # 2. DETALHAMENTO DE CADA SUBSISTEMA
+    elem.append(Paragraph("ESPECIFICAÇÕES TÉCNICAS E MEMORIAL", h1))
+    elem.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
+    elem.append(Paragraph("2. DESCRIÇÃO DOS SUBSISTEMAS E INSUMOS", h2))
+    elem.append(Spacer(1, 10))
+    
+    col_it = 'ITEM' if 'ITEM' in df_m.columns else (df_m.columns[2] if not df_m.empty else '')
+    col_ob = 'OBSERVACAO' if 'OBSERVACAO' in df_m.columns else (df_m.columns[4] if not df_m.empty and len(df_m.columns)>4 else (df_m.columns[-1] if not df_m.empty else ''))
+    
+    for i, r in df.iterrows():
+        sub_full = str(r["SUBSISTEMA"])
+        pref = sub_full[:2]
+        
+        # Criação do Bloco do Subsistema
+        bloco_sub = []
+        bloco_sub.append(Paragraph(sub_full, h3))
+        
+        # Parágrafo Explicativo (Insumos)
+        desc_insumo = DESC_INSUMOS.get(pref, "Serviços e materiais vinculados a esta etapa construtiva.")
+        bloco_sub.append(Paragraph(f"<i><b>Composição Geral:</b> {desc_insumo}</i>", b_n))
+        bloco_sub.append(Spacer(1, 8))
+        
+        # Tabela de Memorial (se houver na planilha)
+        t_layout = None
+        if not df_m.empty:
+            f = df_m[df_m['CODIGO'] == pref]
             if not f.empty:
-                img_f = Image(card_etapa(pref), width=2.0*inch, height=1.4*inch)
-                md = [[Paragraph("<b>ITEM</b>", b_b), Paragraph("<b>OBSERVAÇÃO</b>", b_b)]]
+                md = [[Paragraph("<b>SERVIÇO / COMPONENTE</b>", b_w), Paragraph("<b>OBSERVAÇÕES</b>", b_w)]]
                 for _, ir in f.iterrows():
-                    if str(ir.get(col_it, '')) != "nan": md.append([Paragraph(str(ir.get(col_it, '')), b_n), Paragraph(str(ir.get(col_ob, '-')), b_n)])
-                tm = Table(md, colWidths=[120, 180]); tm.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3)]))
-                lt = Table([[[Paragraph(r["SUBSISTEMA"], h2), Spacer(1,3), tm], img_f]], colWidths=[310, 160])
-                lt.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('ALIGN', (1,0), (1,-1), 'RIGHT')]))
-                elem.append(lt); elem.append(Spacer(1, 15))
+                    item_txt = str(ir.get(col_it, ''))
+                    if item_txt != "nan" and item_txt.strip() != "":
+                        md.append([Paragraph(item_txt, ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO)), Paragraph(str(ir.get(col_ob, '-')), ParagraphStyle('BN_Left', fontName='Helvetica', fontSize=8.5, textColor=COR_TEXTO))])
+                
+                if len(md) > 1:
+                    tm = Table(md, colWidths=[120, 180])
+                    tm.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA), ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey), ('PADDING', (0,0), (-1,-1), 3)]))
+                    
+                    # Tentativa de Adicionar Imagem ao Lado
+                    img_f = None
+                    try:
+                        img_path = card_etapa(pref)
+                        if img_path: img_f = Image(img_path, width=2.0*inch, height=1.4*inch)
+                    except: pass
+                    
+                    if img_f:
+                        lt = Table([[[tm], img_f]], colWidths=[310, 160])
+                        lt.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('ALIGN', (1,0), (1,-1), 'RIGHT')]))
+                        bloco_sub.append(lt)
+                    else:
+                        bloco_sub.append(tm)
+        
+        bloco_sub.append(Spacer(1, 15))
+        elem.append(KeepTogether(bloco_sub))
 
     doc.build(elem, onFirstPage=lambda c, d: None, onLaterPages=lambda c, d: (c.saveState(), c.setFont('Helvetica-Bold', 8), c.setFillColor(COR_PRIMARIA), c.drawRightString(letter[0]-36, 25, f"Página {d.page}"), c.restoreState()))
     buf.seek(0); return buf.getvalue()
@@ -395,7 +509,6 @@ with c_cron2:
 dur_semanas = [d1, d2, d3, d4, d5]
 inic_semanas = [0, i2, i3, i4, i5]
 
-# Calcula prazo global
 starts_w = [0]*5
 for i in range(1, 5): starts_w[i] = starts_w[i-1] + inic_semanas[i]
 max_w = max([starts_w[i] + dur_semanas[i] for i in range(5)])
@@ -403,9 +516,6 @@ prazo_meses_global = int(np.ceil(max_w / 4.0))
 
 st.success(f"⏱️ PRAZO TOTAL CALCULADO: **{max_w} semanas** (Aprox. **{prazo_meses_global} meses**)")
 
-# ==========================================
-# NOVO: FLUXO COMERCIAL DE PAGAMENTO
-# ==========================================
 st.write("---")
 st.write("### 💰 FLUXO DE PAGAMENTO DO CONTRATO")
 st.info("Distribua o percentual do valor do contrato que será faturado/cobrado a cada mês.")
@@ -423,7 +533,6 @@ for m in range(prazo_meses_global):
         perc_pagamento.append(val)
 
 st.session_state.perc_pagamento = perc_pagamento
-
 soma_perc = sum(perc_pagamento)
 if abs(soma_perc - 100.0) > 0.01:
     st.warning(f"⚠️ A soma dos percentuais está em **{soma_perc:.2f}%**. Ajuste para fechar exatos 100%.")
@@ -467,8 +576,9 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
         
         v_mer = sum(c_merc); v_con = sum(c_cont)
         gm = agrupar_macro(df_val, 'CUSTO_MERCADO'); gc = agrupar_macro(df_val, 'CUSTO_CONTRATO')
-        txt_map = {"BAIXO": "BÁSICA", "MEDIO": "PADRÃO", "ALTO": "COMPLEXA/LUXO"}
-        cf = {'fund': txt_map[nv_fund], 'estr': txt_map[nv_estr], 'inst': txt_map[nv_inst], 'acab': txt_map[nv_acab]}
+        
+        # Manda exatamente qual chave técnica (BAIXO, MEDIO, ALTO) foi escolhida para a função gerar_pdf pintar de Laranja
+        cf = {'fund': nv_fund, 'estr': nv_estr, 'inst': nv_inst, 'acab': nv_acab}
         
         if exibir_graficos:
             buf_gm_r = plot_rosca(gm, v_mer)
@@ -485,4 +595,4 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
         pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, area_cobertura_m2, prazo_meses_global, max_w, cf, df_val, v_mer, v_con, sum(mt_c), sum(mo_c), buf_gm_r, buf_gm_g, buf_gm_c, buf_gc_r, buf_gc_g, buf_gc_c, df_mem, exibir_graficos, perc_pagamento)
         
         st.success("✅ DOSSIÊ DUPLO GERADO COM SUCESSO!")
-        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V8.1)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V8.2)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
