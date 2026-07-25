@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. CONFIGURAÇÕES GERAIS E CORES DA MARCA
 # ==========================================
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V6.0", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V6.3", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -29,39 +29,53 @@ COR_SECUNDARIA = colors.HexColor(HEX_SECUNDARIA)
 COR_FUNDO = colors.HexColor(HEX_FUNDO)
 COR_TEXTO = colors.HexColor(HEX_TEXTO)
 
-URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
+# NOVOS LINKS INTEGRADOS
+URL_VALORES = "https://docs.google.com/spreadsheets/d/1kA4NHJ8VU3eDnipJ0ADArTWzm0YOFhD_t4FT1_nuHX4/export?format=csv&gid=0"
+URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
 # ==========================================
-# 2. BANCO DE DADOS E CACHE
+# 2. CARREGAMENTO DE DADOS (NOVA ESTRUTURA)
 # ==========================================
 @st.cache_data(ttl=15)
 def carregar_valores():
     try:
         df = pd.read_csv(URL_VALORES)
         df.columns = df.columns.str.strip().str.upper()
-        if len(df) >= 10: return df
+        if "MAT_BAIXO" in df.columns and len(df) >= 10: 
+            return df
     except: pass
     
-    # Backup de Segurança Paramétrico
+    # BACKUP SE HOUVER FALHA DE CONEXÃO
     return pd.DataFrame([
-        {"SUBSISTEMA": "01. SERVIÇOS PRELIMINARES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 5.0, "CUSTO_MO_UNIT_RS": 20.0},
-        {"SUBSISTEMA": "02. GESTÃO DE OBRA E ADM", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 10.0, "CUSTO_MO_UNIT_RS": 110.0},
-        {"SUBSISTEMA": "03. INSTALAÇÕES DO CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 15.0, "CUSTO_MO_UNIT_RS": 15.0},
-        {"SUBSISTEMA": "04. LOCAÇÕES E EQUIPAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 12.0, "CUSTO_MO_UNIT_RS": 8.0},
-        {"SUBSISTEMA": "05. INFRAESTRUTURA (FUNDAÇÃO)", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 180.0, "CUSTO_MO_UNIT_RS": 100.0},
-        {"SUBSISTEMA": "06. SUPERESTRUTURA LSF", "CONSUMO_MEDIO_M2": 30.0, "CUSTO_MAT_UNIT_RS": 7.5, "CUSTO_MO_UNIT_RS": 3.5},
-        {"SUBSISTEMA": "07. FECHAMENTOS (EXT/INT)", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 140.0, "CUSTO_MO_UNIT_RS": 80.0},
-        {"SUBSISTEMA": "08. COBERTURA E TELHADO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 110.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "09. IMPERMEABILIZAÇÕES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 20.0, "CUSTO_MO_UNIT_RS": 15.0},
-        {"SUBSISTEMA": "10. INSTALAÇÕES HIDRÁULICAS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 65.0, "CUSTO_MO_UNIT_RS": 45.0},
-        {"SUBSISTEMA": "11. INSTALAÇÕES ELÉTRICAS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 75.0, "CUSTO_MO_UNIT_RS": 55.0},
-        {"SUBSISTEMA": "12. CLIMATIZAÇÃO E EXAUSTÃO", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 45.0, "CUSTO_MO_UNIT_RS": 30.0},
-        {"SUBSISTEMA": "13. REVESTIMENTOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 70.0, "CUSTO_MO_UNIT_RS": 70.0},
-        {"SUBSISTEMA": "14. PISOS E PAVIMENTAÇÕES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 70.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "15. ESQUADRIAS E VIDROS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 130.0, "CUSTO_MO_UNIT_RS": 50.0},
-        {"SUBSISTEMA": "16. URBANIZAÇÃO E EXTERNOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 30.0, "CUSTO_MO_UNIT_RS": 20.0},
-        {"SUBSISTEMA": "17. LIMPEZA FINAL DA OBRA", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 3.0, "CUSTO_MO_UNIT_RS": 12.0}
+        {"SUBSISTEMA": "01. SERVIÇOS PRELIMINARES", "CATEGORIA": "CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 5.0, "MAT_MEDIO": 5.0, "MAT_ALTO": 5.0, "MO_BAIXO": 20.0, "MO_MEDIO": 20.0, "MO_ALTO": 20.0},
+        {"SUBSISTEMA": "02. GESTÃO DE OBRA E ADM", "CATEGORIA": "CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 10.0, "MAT_MEDIO": 10.0, "MAT_ALTO": 10.0, "MO_BAIXO": 110.0, "MO_MEDIO": 110.0, "MO_ALTO": 110.0},
+        {"SUBSISTEMA": "03. INSTALAÇÕES DO CANTEIRO", "CATEGORIA": "CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 15.0, "MAT_MEDIO": 15.0, "MAT_ALTO": 15.0, "MO_BAIXO": 15.0, "MO_MEDIO": 15.0, "MO_ALTO": 15.0},
+        {"SUBSISTEMA": "04. LOCAÇÕES E EQUIPAMENTOS", "CATEGORIA": "CANTEIRO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 12.0, "MAT_MEDIO": 12.0, "MAT_ALTO": 12.0, "MO_BAIXO": 8.0, "MO_MEDIO": 8.0, "MO_ALTO": 8.0},
+        {"SUBSISTEMA": "05. INFRAESTRUTURA (FUNDAÇÃO)", "CATEGORIA": "FUNDACAO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 153.0, "MAT_MEDIO": 180.0, "MAT_ALTO": 243.0, "MO_BAIXO": 85.0, "MO_MEDIO": 100.0, "MO_ALTO": 135.0},
+        {"SUBSISTEMA": "06. SUPERESTRUTURA LSF", "CATEGORIA": "ESTRUTURA", "CONSUMO_MEDIO_M2": 30.0, "MAT_BAIXO": 6.75, "MAT_MEDIO": 7.5, "MAT_ALTO": 9.37, "MO_BAIXO": 3.15, "MO_MEDIO": 3.5, "MO_ALTO": 4.37},
+        {"SUBSISTEMA": "07. FECHAMENTOS (EXT/INT)", "CATEGORIA": "VEDACOES", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 126.0, "MAT_MEDIO": 140.0, "MAT_ALTO": 182.0, "MO_BAIXO": 72.0, "MO_MEDIO": 80.0, "MO_ALTO": 104.0},
+        {"SUBSISTEMA": "08. COBERTURA E TELHADO", "CATEGORIA": "ESTRUTURA", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 99.0, "MAT_MEDIO": 110.0, "MAT_ALTO": 137.5, "MO_BAIXO": 45.0, "MO_MEDIO": 50.0, "MO_ALTO": 62.5},
+        {"SUBSISTEMA": "09. IMPERMEABILIZAÇÕES", "CATEGORIA": "FUNDACAO", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 17.0, "MAT_MEDIO": 20.0, "MAT_ALTO": 27.0, "MO_BAIXO": 12.75, "MO_MEDIO": 15.0, "MO_ALTO": 20.25},
+        {"SUBSISTEMA": "10. INSTALAÇÕES HIDRÁULICAS", "CATEGORIA": "INSTALACOES", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 58.5, "MAT_MEDIO": 65.0, "MAT_ALTO": 84.5, "MO_BAIXO": 40.5, "MO_MEDIO": 45.0, "MO_ALTO": 58.5},
+        {"SUBSISTEMA": "11. INSTALAÇÕES ELÉTRICAS", "CATEGORIA": "INSTALACOES", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 67.5, "MAT_MEDIO": 75.0, "MAT_ALTO": 97.5, "MO_BAIXO": 49.5, "MO_MEDIO": 55.0, "MO_ALTO": 71.5},
+        {"SUBSISTEMA": "12. CLIMATIZAÇÃO E EXAUSTÃO", "CATEGORIA": "INSTALACOES", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 40.5, "MAT_MEDIO": 45.0, "MAT_ALTO": 58.5, "MO_BAIXO": 27.0, "MO_MEDIO": 30.0, "MO_ALTO": 39.0},
+        {"SUBSISTEMA": "13. REVESTIMENTOS", "CATEGORIA": "ACABAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 56.0, "MAT_MEDIO": 70.0, "MAT_ALTO": 98.0, "MO_BAIXO": 56.0, "MO_MEDIO": 70.0, "MO_ALTO": 98.0},
+        {"SUBSISTEMA": "14. PISOS E PAVIMENTAÇÕES", "CATEGORIA": "ACABAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 56.0, "MAT_MEDIO": 70.0, "MAT_ALTO": 98.0, "MO_BAIXO": 40.0, "MO_MEDIO": 50.0, "MO_ALTO": 70.0},
+        {"SUBSISTEMA": "15. ESQUADRIAS E VIDROS", "CATEGORIA": "ACABAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 104.0, "MAT_MEDIO": 130.0, "MAT_ALTO": 182.0, "MO_BAIXO": 40.0, "MO_MEDIO": 50.0, "MO_ALTO": 70.0},
+        {"SUBSISTEMA": "16. URBANIZAÇÃO E EXTERNOS", "CATEGORIA": "ACABAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 24.0, "MAT_MEDIO": 30.0, "MAT_ALTO": 42.0, "MO_BAIXO": 16.0, "MO_MEDIO": 20.0, "MO_ALTO": 28.0},
+        {"SUBSISTEMA": "17. LIMPEZA FINAL DA OBRA", "CATEGORIA": "ACABAMENTOS", "CONSUMO_MEDIO_M2": 1.0, "MAT_BAIXO": 2.4, "MAT_MEDIO": 3.0, "MAT_ALTO": 4.2, "MO_BAIXO": 9.6, "MO_MEDIO": 12.0, "MO_ALTO": 16.8}
     ])
+
+@st.cache_data(ttl=15)
+def carregar_memorial():
+    try:
+        df = pd.read_csv(URL_MEMORIAL)
+        df.columns = df.columns.str.strip().str.upper()
+        if "CODIGO" in df.columns:
+            df['CODIGO'] = df['CODIGO'].astype(str).str.extract(r'(\d+)')[0].str.zfill(2)
+            return df
+    except: pass
+    return pd.DataFrame()
 
 # ==========================================
 # 3. MOTORES DE GRÁFICOS (DASHBOARDS)
@@ -142,7 +156,7 @@ def gerar_pdf(cli, loc, am2, af2, m_prazo, conf_cats, df, v_tot, buf_rosca, buf_
         [Paragraph("<b>LOCALIZAÇÃO:</b>", b_b), Paragraph(loc.upper(), b_n)],
         [Paragraph("<b>ÁREA CONSTRUIDA:</b>", b_b), Paragraph(f"{am2:,.2f} M²", b_n)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", b_b), Paragraph(f"{m_prazo} MESES", b_n)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V6.0 — DOSSIÊ PARAMÉTRICO", b_n)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", b_b), Paragraph("V6.3 — DOSSIÊ PARAMÉTRICO DB", b_n)]
     ]
     tc = Table(d_capa, colWidths=[150, 300])
     tc.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), COR_FUNDO), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')), ('PADDING', (0,0), (-1,-1), 6)]))
@@ -225,7 +239,8 @@ def gerar_pdf(cli, loc, am2, af2, m_prazo, conf_cats, df, v_tot, buf_rosca, buf_
 # ==========================================
 with st.sidebar:
     st.write("### AMÂNCIO")
-    st.success("Sistema Inicializado (V6.0)")
+    st.success("Motor de Banco de Dados Ativo")
+    st.info("Conectado à Planilha V6.2 Google Sheets")
 
 st.write("### 📝 DADOS GERAIS DO PROJETO")
 col1, col2 = st.columns(2)
@@ -238,53 +253,61 @@ prazo_meses = col5.slider("PRAZO DA OBRA (MESES):", 3, 12, 6)
 
 st.write("---")
 st.write("### 🎛️ ENGENHARIA PARAMÉTRICA (CLASSIFICAÇÃO POR GRUPOS)")
-st.info("Defina o nível de complexidade e o padrão de entrega para cada grande grupo da obra. Isso alterará dinamicamente a matriz de custos.")
+st.info("O sistema agora lê os valores absolutos (em Reais) diretamente do banco de dados (Planilha Google Sheets) para cada nível de complexidade selecionado abaixo.")
+
+# Mapeamento do Selectbox para a Coluna do Banco de Dados
+map_niveis = {
+    "Leve / Simples / Básica / Comum": "BAIXO",
+    "Moderada / Padrão / Padrão de Entrega": "MEDIO",
+    "Pesada / Complexa / Alta Tecnologia / Altíssimo Luxo": "ALTO"
+}
 
 c_cat1, c_cat2 = st.columns(2)
 with c_cat1:
     st.markdown("**1. Fundação e Infraestrutura**")
-    cat_fund = st.selectbox("Tipo de Solo e Carga:", ["Leve (Solo Firme / Radier Simples)", "Moderada (Padrão de Mercado)", "Pesada (Solo Frágil / Estacas / Muros Arrimo)"], index=1)
-    
+    cat_fund = st.selectbox("Tipo de Solo e Carga:", ["Leve / Simples / Básica / Comum", "Moderada / Padrão / Padrão de Entrega", "Pesada / Complexa / Alta Tecnologia / Altíssimo Luxo"], index=1, key='f')
     st.markdown("**2. Instalações (Elétrica, Hidro, Clima)**")
-    cat_inst = st.selectbox("Nível de Tecnologia:", ["Básica (Convencional)", "Padrão (Boas práticas)", "Alta Tecnologia (Automação / Ar Central)"], index=1)
+    cat_inst = st.selectbox("Nível de Tecnologia:", ["Leve / Simples / Básica / Comum", "Moderada / Padrão / Padrão de Entrega", "Pesada / Complexa / Alta Tecnologia / Altíssimo Luxo"], index=1, key='i')
 
 with c_cat2:
     st.markdown("**3. Estrutura LSF e Cobertura**")
-    cat_estr = st.selectbox("Arquitetura e Vãos:", ["Simples (Vãos curtos / Telhado Embutido)", "Padrão (Arquitetura Convencional)", "Complexa (Grandes Vãos / Balanços / Pé Direito Duplo)"], index=1)
-    
+    cat_estr = st.selectbox("Arquitetura e Vãos:", ["Leve / Simples / Básica / Comum", "Moderada / Padrão / Padrão de Entrega", "Pesada / Complexa / Alta Tecnologia / Altíssimo Luxo"], index=1, key='e')
     st.markdown("**4. Acabamentos e Revestimentos**")
-    cat_acab = st.selectbox("Padrão de Entrega:", ["Comum (Comercial / Básico)", "Alto Padrão (Porcelanatos Grandes / Metais Premium)", "Altíssimo Padrão (Luxo / Mármores / Esquadrias Gold)"], index=1)
+    cat_acab = st.selectbox("Padrão de Entrega:", ["Leve / Simples / Básica / Comum", "Moderada / Padrão / Padrão de Entrega", "Pesada / Complexa / Alta Tecnologia / Altíssimo Luxo"], index=1, key='a')
 
 bdi = st.slider("MARGEM DA CONSTRUTORA / BDI (%):", 10, 35, 20) / 100.0
 
 if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="primary"):
-    with st.spinner("Processando engenharia paramétrica e gerando dossiê..."):
+    with st.spinner("Lendo banco de dados de preços da planilha e calculando..."):
         df_base = carregar_valores()
         
-        # Mapeamento dos Fatores Multiplicadores
-        f_fund = 0.85 if "Leve" in cat_fund else (1.35 if "Pesada" in cat_fund else 1.0)
-        f_estr = 0.90 if "Simples" in cat_estr else (1.25 if "Complexa" in cat_estr else 1.0)
-        f_inst = 0.90 if "Básica" in cat_inst else (1.30 if "Alta" in cat_inst else 1.0)
-        f_acab = 0.80 if "Comum" in cat_acab else (1.40 if "Altíssimo" in cat_acab else 1.0)
+        # Converte as escolhas da tela em textos (BAIXO, MEDIO, ALTO)
+        nv_fund = map_niveis[cat_fund]
+        nv_estr = map_niveis[cat_estr]
+        nv_inst = map_niveis[cat_inst]
+        nv_acab = map_niveis[cat_acab]
         
         custos_finais = []
         for i, r in df_base.iterrows():
             sub = str(r["SUBSISTEMA"]).upper()
             pref = sub[:2]
-            c, cm, cmo = r["CONSUMO_MEDIO_M2"], r["CUSTO_MAT_UNIT_RS"], r["CUSTO_MO_UNIT_RS"]
+            consumo = float(r.get("CONSUMO_MEDIO_M2", 1.0))
             
-            # Area correta
+            # DESCUBRA QUAL NÍVEL APLICAR NESTA LINHA
+            if pref in ['05', '09']: nivel_atual = nv_fund
+            elif pref in ['06', '08']: nivel_atual = nv_estr
+            elif pref in ['07', '10', '11', '12']: nivel_atual = nv_inst
+            elif pref in ['13', '14', '15', '16', '17']: nivel_atual = nv_acab
+            else: nivel_atual = "MEDIO" # Canteiro sempre Padrão
+            
+            # PUXA O VALOR EXATO DO BANCO DE DADOS (Ou 0 se não achar)
+            c_mat = float(r.get(f"MAT_{nivel_atual}", r.get("MAT_MEDIO", 0)))
+            c_mo = float(r.get(f"MO_{nivel_atual}", r.get("MO_MEDIO", 0)))
+            
             area = area_fundacao_m2 if pref in ['05', '09'] else area_m2
             
-            # Fator do Grupo
-            if pref in ['01', '02', '03', '04']: fator = 1.0 # Canteiro Padrão
-            elif pref in ['05', '09']: fator = f_fund
-            elif pref in ['06', '08']: fator = f_estr
-            elif pref in ['07', '10', '11', '12']: fator = f_inst
-            else: fator = f_acab # 13, 14, 15, 16, 17
-            
-            # Calculo
-            custo_item = (c * cm * fator * area * (1+bdi)) + (c * cmo * fator * area * (1+bdi))
+            # CÁLCULO DIRETO (Valor Unitário Absoluto * Consumo * Area * BDI)
+            custo_item = (consumo * c_mat * area * (1+bdi)) + (consumo * c_mo * area * (1+bdi))
             custos_finais.append(custo_item)
             
         df_val = df_base.copy()
@@ -296,9 +319,11 @@ if st.button("🚀 CALCULAR E GERAR DOSSIÊ", use_container_width=True, type="pr
         buf_rosca = plot_rosca(gm, v_tot)
         buf_curva = plot_curva_s(gm, prazo_meses, v_tot)
         
-        conf_cats = {'fund': cat_fund, 'estr': cat_estr, 'inst': cat_inst, 'acab': cat_acab}
+        # Para ficar bonito no PDF
+        txt_map = {"BAIXO": "BÁSICA / COMUM", "MEDIO": "PADRÃO", "ALTO": "COMPLEXA / LUXO"}
+        conf_cats = {'fund': txt_map[nv_fund], 'estr': txt_map[nv_estr], 'inst': txt_map[nv_inst], 'acab': txt_map[nv_acab]}
         
         pdf = gerar_pdf(cliente, local, area_m2, area_fundacao_m2, prazo_meses, conf_cats, df_val, v_tot, buf_rosca, buf_curva)
         
         st.success("✅ ORÇAMENTO PROCESSADO COM SUCESSO!")
-        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V6.0)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR NOVO DOSSIÊ (V6.3)", data=pdf, file_name=f"ORCAMENTO_AMANCIO_{cliente.replace(' ','_')}.pdf", mime="application/pdf", use_container_width=True)
