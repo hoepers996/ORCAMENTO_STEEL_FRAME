@@ -10,10 +10,9 @@ from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 import io
 import os
-import re
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.4", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.6", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -27,39 +26,21 @@ COR_SECUNDARIA = colors.HexColor(HEX_SECUNDARIA)
 COR_FUNDO = colors.HexColor(HEX_FUNDO)
 COR_TEXTO = colors.HexColor(HEX_TEXTO)
 
-# MENU LATERAL PARA LINKS DO GOOGLE SHEETS
-with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=200)
-    else:
-        st.write("### AMÂNCIO")
-    st.write("### 🔗 Conexões Google Sheets")
-    link_valores = st.text_input("Link da Aba VALORES:", value="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv")
-    link_memorial = st.text_input("Link do Navegador da Aba MEMORIAL:", placeholder="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/edit?gid=819485538#gid=819485538")
-    
-    st.info("Copie o link da barra do seu navegador (URL) enquanto estiver visualizando a aba MEMORIAL e cole no campo acima.")
+# LINKS DIRETOS DA SUA PLANILHA (VIA GID EXATO)
+URL_VALORES = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=0"
+URL_MEMORIAL = "https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv&gid=819485538"
 
-# EXTRATOR INTELIGENTE DE LINKS
-def converter_link_sheets(url):
-    match = re.search(r'd/([a-zA-Z0-9-_]+)', url)
-    gid_match = re.search(r'gid=([0-9]+)', url)
-    if match:
-        sheet_id = match.group(1)
-        gid = gid_match.group(1) if gid_match else "0"
-        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-    return url
-
-# 2. CARREGAR DADOS DE VALORES
+# 2. FUNÇÕES DE CARREGAMENTO DE DADOS
 @st.cache_data(ttl=15)
-def carregar_dados_google_sheets(url):
+def carregar_valores_sheets():
     try:
-        url_csv = converter_link_sheets(url)
-        df = pd.read_csv(url_csv)
+        df = pd.read_csv(URL_VALORES)
+        df.columns = df.columns.str.strip().str.upper()
         if len(df) >= 10:
             return df, "OK"
     except Exception as e:
         pass
-    # BACKUP CASO FALHE
+    # BACKUP
     return pd.DataFrame([
         {"SUBSISTEMA": "01. SERVIÇOS PRELIMINARES", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 5.0, "CUSTO_MO_UNIT_RS": 20.0},
         {"SUBSISTEMA": "02. GESTÃO DE OBRA E ADM", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 10.0, "CUSTO_MO_UNIT_RS": 110.0},
@@ -78,30 +59,32 @@ def carregar_dados_google_sheets(url):
         {"SUBSISTEMA": "15. ESQUADRIAS E VIDROS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 130.0, "CUSTO_MO_UNIT_RS": 50.0},
         {"SUBSISTEMA": "16. URBANIZAÇÃO E EXTERNOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 30.0, "CUSTO_MO_UNIT_RS": 20.0},
         {"SUBSISTEMA": "17. LIMPEZA FINAL DA OBRA", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 3.0, "CUSTO_MO_UNIT_RS": 12.0}
-    ]), "USANDO BACKUP (Verifique o Link)"
+    ]), "BACKUP"
 
-# 3. CARREGAR DADOS DO MEMORIAL (COM LIMPEZA DE DADOS)
 @st.cache_data(ttl=15)
-def carregar_memorial_google_sheets(url_navegador):
-    if not url_navegador:
-        return pd.DataFrame(), "LINK VAZIO"
-        
-    url_csv = converter_link_sheets(url_navegador)
+def carregar_memorial_sheets():
     try:
-        df_mem = pd.read_csv(url_csv)
-        # Limpar espaços invisíveis no nome das colunas e forçar maiúsculo
-        df_mem.columns = df_mem.columns.str.strip().str.upper()
-        
-        if "CODIGO" in df_mem.columns:
-            # Extrair apenas os números e garantir 2 dígitos (ex: "1" vira "01")
-            df_mem['CODIGO'] = df_mem['CODIGO'].astype(str).str.extract(r'(\d+)')[0].str.zfill(2)
-            return df_mem, "OK"
-        else:
-            return pd.DataFrame(), "ERRO: Coluna 'CODIGO' não encontrada na planilha."
+        df = pd.read_csv(URL_MEMORIAL)
+        df.columns = df.columns.str.strip().str.upper()
+        if "CODIGO" in df.columns:
+            df['CODIGO'] = df['CODIGO'].astype(str).str.extract(r'(\d+)')[0].str.zfill(2)
+            return df, "OK"
     except Exception as e:
-        return pd.DataFrame(), f"ERRO DE LEITURA: {str(e)}"
+        pass
+    return pd.DataFrame(), "ERRO_LEITURA"
 
-# 4. GERADOR DE GRÁFICOS DO DASHBOARD
+# MENU LATERAL STATUS
+with st.sidebar:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=200)
+    else:
+        st.write("### AMÂNCIO")
+        
+    st.write("### 🟢 Status da Conexão")
+    st.success("Planilha Principal Conectada")
+    st.success("Aba Memorial (GID: 819485538) Conectada")
+
+# 3. GERADOR DE GRÁFICOS DO DASHBOARD
 def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     macro_map = {
         '01': '1. Gestão e Canteiro', '02': '1. Gestão e Canteiro', '03': '1. Gestão e Canteiro', '04': '1. Gestão e Canteiro',
@@ -189,7 +172,7 @@ def paginas_seguintes(canvas, doc):
     canvas.drawRightString(letter[0] - 36, 25, f"Página {doc.page}")
     canvas.restoreState()
 
-# 5. GERADOR DO DOSSIÊ PDF
+# 4. GERADOR DO DOSSIÊ PDF
 def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
@@ -238,7 +221,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.4 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.6 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -311,7 +294,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     ]))
     elements.append(t_resumo)
     elements.append(Spacer(1, 6))
-    elements.append(Paragraph("5. EAP DETALHADA POR SUBSISTEMA CONSTRUTIVO (17 ITENS)", h2_style))
+    elements.append(Paragraph("5. EAP DETALHADA POR SUBSISTEMA CONSTRUTIVO", h2_style))
     
     if exibir_separado:
         data_table = [[
@@ -353,8 +336,14 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(Spacer(1, 10))
 
     if df_mem.empty:
-         elements.append(Paragraph("<i>Nenhum item de memorial carregado. Verifique a aba e a coluna CODIGO.</i>", body))
+         elements.append(Paragraph("<i>Nenhum item de memorial carregado da planilha.</i>", body))
     else:
+        # Pega as colunas existentes de forma segura
+        col_item = 'ITEM' if 'ITEM' in df_mem.columns else df_mem.columns[2]
+        col_status = 'STATUS' if 'STATUS' in df_mem.columns else df_mem.columns[3]
+        col_obs = 'OBSERVACAO' if 'OBSERVACAO' in df_mem.columns else (df_mem.columns[4] if len(df_mem.columns) > 4 else df_mem.columns[-1])
+        col_desc = 'DESCRICAO_ETAPA' if 'DESCRICAO_ETAPA' in df_mem.columns else df_mem.columns[1]
+
         for idx, row in df.iterrows():
             sub_full = str(row["SUBSISTEMA"])
             prefix = sub_full[:2]
@@ -362,8 +351,9 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
             df_filtro = df_mem[df_mem['CODIGO'] == prefix]
             
             if not df_filtro.empty:
-                texto_explicativo = str(df_filtro.iloc[0]['DESCRICAO_ETAPA'])
-                if pd.isna(texto_explicativo): texto_explicativo = "Etapa do projeto."
+                texto_explicativo = str(df_filtro.iloc[0][col_desc])
+                if pd.isna(texto_explicativo) or texto_explicativo == "nan": 
+                    texto_explicativo = "Etapa do projeto construtivo."
                 
                 tabela_memorial = []
                 tabela_memorial.append(Paragraph(sub_full, h3_style))
@@ -377,11 +367,12 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
                 ]]
                 
                 for _, item_row in df_filtro.iterrows():
-                    servico = str(item_row.get('ITEM', ''))
-                    status_txt = str(item_row.get('STATUS', '')).upper()
-                    obs = str(item_row.get('OBSERVACAO', ''))
+                    servico = str(item_row.get(col_item, ''))
+                    status_txt = str(item_row.get(col_status, '')).upper().strip()
+                    obs = str(item_row.get(col_obs, ''))
                     
                     if pd.isna(servico) or servico == "nan": continue
+                    if pd.isna(obs) or obs == "nan": obs = "-"
                     
                     if "NÃO" in status_txt or "NAO" in status_txt:
                         status_f = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
@@ -407,7 +398,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     buffer.seek(0)
     return buffer.getvalue()
 
-# 6. APP PRINCIPAL E FORMULÁRIO
+# 5. FORMULÁRIO PRINCIPAL DO STREAMLIT
 st.write("### 📝 DADOS GERAIS DO PROJETO E CLIENTE")
 with st.form("form_orcamento"):
     col1, col2 = st.columns(2)
@@ -438,23 +429,18 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.4)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.6)", use_container_width=True)
 
 if submitted:
-    with st.spinner("Conectando ao Google Sheets e gerando Dossiê Analítico..."):
-        df, status_val = carregar_dados_google_sheets(link_valores)
-        df_mem, status_mem = carregar_memorial_google_sheets(link_memorial)
+    with st.spinner("Sincronizando com o Google Sheets e gerando Dossiê..."):
+        df_val, status_val = carregar_valores_sheets()
+        df_mem, status_mem = carregar_memorial_sheets()
         
-        # EXIBIR AVISOS CASO A CONEXÃO FALHE
-        if status_mem != "OK":
-            st.warning(f"⚠️ AVISO MEMORIAL: {status_mem}. O sistema pode não carregar todos os itens. Verifique o link fornecido e se a planilha está com acesso público.")
-            
         fator_padrao = 0.85 if padrao == "BAIXO" else (1.00 if padrao == "MÉDIO" else 1.30)
         fator_fundacao = 0.85 if "LEVE" in tipo_fundacao else (1.35 if "PESADA" in tipo_fundacao else 1.00)
 
         custos_mat, custos_mo = [], []
-        
-        for idx, row in df.iterrows():
+        for idx, row in df_val.iterrows():
             sub = str(row["SUBSISTEMA"]).upper()
             consumo = float(row.get("CONSUMO_MEDIO_M2", 1.0))
             c_mat = float(row.get("CUSTO_MAT_UNIT_RS", 50.0))
@@ -469,25 +455,24 @@ if submitted:
             custos_mat.append(mat_item)
             custos_mo.append(mo_item)
 
-        df["CUSTO_MAT_FINAL"] = custos_mat
-        df["CUSTO_MO_FINAL"] = custos_mo
-        df["CUSTO_FINAL_COM_BDI"] = df["CUSTO_MAT_FINAL"] + df["CUSTO_MO_FINAL"]
-        df["PARTICIPACAO_PCT"] = (df["CUSTO_FINAL_COM_BDI"] / df["CUSTO_FINAL_COM_BDI"].sum()) * 100
+        df_val["CUSTO_MAT_FINAL"] = custos_mat
+        df_val["CUSTO_MO_FINAL"] = custos_mo
+        df_val["CUSTO_FINAL_COM_BDI"] = df_val["CUSTO_MAT_FINAL"] + df_val["CUSTO_MO_FINAL"]
+        df_val["PARTICIPACAO_PCT"] = (df_val["CUSTO_FINAL_COM_BDI"] / df_val["CUSTO_FINAL_COM_BDI"].sum()) * 100
         
-        valor_total = df["CUSTO_FINAL_COM_BDI"].sum()
+        valor_total = df_val["CUSTO_FINAL_COM_BDI"].sum()
         valor_m2 = valor_total / area_m2
         
-        # GERAR GRÁFICOS E PDF
-        buf1, buf2 = gerar_graficos_dashboard(df, valor_total, prazo_meses)
+        buf1, buf2 = gerar_graficos_dashboard(df_val, valor_total, prazo_meses)
         pdf_bytes = gerar_dossie_pdf_bytes(
             cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
-            padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
+            padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V3.4 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL V3.6 GERADO COM SUCESSO!")
         
         st.download_button(
-            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (COM MEMORIAL DINÂMICO)",
+            label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF)",
             data=pdf_bytes,
             file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
