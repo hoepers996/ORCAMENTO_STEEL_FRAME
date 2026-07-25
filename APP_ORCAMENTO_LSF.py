@@ -10,9 +10,10 @@ from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 import io
 import os
+import re
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.3", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.4", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -28,26 +29,35 @@ COR_TEXTO = colors.HexColor(HEX_TEXTO)
 
 # MENU LATERAL PARA LINKS DO GOOGLE SHEETS
 with st.sidebar:
-    st.image("logo.png", width=200) if os.path.exists("logo.png") else st.write("AMÂNCIO")
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=200)
+    else:
+        st.write("### AMÂNCIO")
     st.write("### 🔗 Conexões Google Sheets")
-    link_valores = st.text_input("Link da Aba VALORES (CSV):", value="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv")
-    link_memorial = st.text_input("Link do Navegador da Aba MEMORIAL:", placeholder="Ex: https://docs.google.com/.../edit#gid=123456")
+    link_valores = st.text_input("Link da Aba VALORES:", value="https://docs.google.com/spreadsheets/d/1ovEvMmtrE4VVaXaxQQlUh0I7bAkbQKNL-cBEPgwGDR4/export?format=csv")
+    link_memorial = st.text_input("Link do Navegador da Aba MEMORIAL:", placeholder="Cole aqui o link da barra superior...")
     
-    st.info("Para o Memorial, basta colar o link normal da planilha que você copia lá em cima no navegador quando está na aba MEMORIAL.")
+    st.info("Copie o link da barra do seu navegador (URL) enquanto estiver visualizando a aba MEMORIAL e cole no campo acima.")
 
+# EXTRATOR INTELIGENTE DE LINKS
 def converter_link_sheets(url):
-    if "/edit#gid=" in url:
-        return url.replace("/edit#gid=", "/export?format=csv&gid=")
+    match = re.search(r'd/([a-zA-Z0-9-_]+)', url)
+    gid_match = re.search(r'gid=([0-9]+)', url)
+    if match:
+        sheet_id = match.group(1)
+        gid = gid_match.group(1) if gid_match else "0"
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     return url
 
 # 2. CARREGAR DADOS DE VALORES
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def carregar_dados_google_sheets(url):
     try:
-        df = pd.read_csv(url)
+        url_csv = converter_link_sheets(url)
+        df = pd.read_csv(url_csv)
         if len(df) >= 10:
-            return df
-    except Exception:
+            return df, "OK"
+    except Exception as e:
         pass
     # BACKUP CASO FALHE
     return pd.DataFrame([
@@ -68,33 +78,30 @@ def carregar_dados_google_sheets(url):
         {"SUBSISTEMA": "15. ESQUADRIAS E VIDROS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 130.0, "CUSTO_MO_UNIT_RS": 50.0},
         {"SUBSISTEMA": "16. URBANIZAÇÃO E EXTERNOS", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 30.0, "CUSTO_MO_UNIT_RS": 20.0},
         {"SUBSISTEMA": "17. LIMPEZA FINAL DA OBRA", "CONSUMO_MEDIO_M2": 1.0, "CUSTO_MAT_UNIT_RS": 3.0, "CUSTO_MO_UNIT_RS": 12.0}
-    ])
+    ]), "USANDO BACKUP (Verifique o Link)"
 
-# 3. CARREGAR DADOS DO MEMORIAL DESCRITIVO
-@st.cache_data(ttl=60)
+# 3. CARREGAR DADOS DO MEMORIAL (COM LIMPEZA DE DADOS)
+@st.cache_data(ttl=15)
 def carregar_memorial_google_sheets(url_navegador):
-    if url_navegador:
-        url_csv = converter_link_sheets(url_navegador)
-        try:
-            df_mem = pd.read_csv(url_csv)
-            if "CODIGO" in df_mem.columns:
-                df_mem['CODIGO'] = df_mem['CODIGO'].astype(str).str.zfill(2)
-                return df_mem
-        except:
-            pass
-            
-    # BACKUP INTERNO (IGUAL AO TEXTO QUE VOCÊ VAI COLAR NA PLANILHA)
-    bkp = [
-        {"CODIGO": "01", "DESCRICAO_ETAPA": "Fase inicial que contempla as aprovações, projetos e preparativos do terreno.", "ITEM": "Projetos Executivos LSF e Modulação", "STATUS": "INCLUSO", "OBSERVACAO": "Elaborado por nossa engenharia"},
-        {"CODIGO": "01", "DESCRICAO_ETAPA": "Fase inicial que contempla as aprovações, projetos e preparativos do terreno.", "ITEM": "Taxas de Aprovação Prefeitura", "STATUS": "NÃO INCLUSO", "OBSERVACAO": "Responsabilidade do proprietário"},
-        {"CODIGO": "05", "DESCRICAO_ETAPA": "Etapa de infraestrutura e fundação da edificação.", "ITEM": "Radier de Concreto Armado", "STATUS": "INCLUSO", "OBSERVACAO": "Fundação rasa padrão"},
-        {"CODIGO": "05", "DESCRICAO_ETAPA": "Etapa de infraestrutura e fundação da edificação.", "ITEM": "Estacas Profundas (Solo Mole)", "STATUS": "NÃO INCLUSO", "OBSERVACAO": "Depende de laudo de sondagem"},
-        {"CODIGO": "06", "DESCRICAO_ETAPA": "Montagem da superestrutura em painéis de aço galvanizado (LSF).", "ITEM": "Perfis Galvanizados Z275", "STATUS": "INCLUSO", "OBSERVACAO": "Estrutura principal de painéis"},
-        {"CODIGO": "07", "DESCRICAO_ETAPA": "Fechamentos externos e internos com chapas estruturais.", "ITEM": "Placas Cimentícias e Drywall", "STATUS": "INCLUSO", "OBSERVACAO": "Fechamento completo"},
-    ]
-    return pd.DataFrame(bkp)
+    if not url_navegador:
+        return pd.DataFrame(), "LINK VAZIO"
+        
+    url_csv = converter_link_sheets(url_navegador)
+    try:
+        df_mem = pd.read_csv(url_csv)
+        # Limpar espaços invisíveis no nome das colunas e forçar maiúsculo
+        df_mem.columns = df_mem.columns.str.strip().str.upper()
+        
+        if "CODIGO" in df_mem.columns:
+            # Extrair apenas os números e garantir 2 dígitos (ex: "1" vira "01")
+            df_mem['CODIGO'] = df_mem['CODIGO'].astype(str).str.extract(r'(\d+)')[0].str.zfill(2)
+            return df_mem, "OK"
+        else:
+            return pd.DataFrame(), "ERRO: Coluna 'CODIGO' não encontrada na planilha."
+    except Exception as e:
+        return pd.DataFrame(), f"ERRO DE LEITURA: {str(e)}"
 
-# 4. GERADOR DE GRÁFICOS (OMITIDO PARA ENCURTAR, MANTENDO A VERSÃO 3.1 EXATA)
+# 4. GERADOR DE GRÁFICOS DO DASHBOARD
 def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     macro_map = {
         '01': '1. Gestão e Canteiro', '02': '1. Gestão e Canteiro', '03': '1. Gestão e Canteiro', '04': '1. Gestão e Canteiro',
@@ -182,7 +189,7 @@ def paginas_seguintes(canvas, doc):
     canvas.drawRightString(letter[0] - 36, 25, f"Página {doc.page}")
     canvas.restoreState()
 
-# 5. GERADOR DO DOSSIÊ PDF (AGORA COM MEMORIAL DINÂMICO)
+# 5. GERADOR DO DOSSIÊ PDF
 def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=40)
@@ -231,7 +238,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.3 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.4 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -345,59 +352,56 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(Paragraph("Relação analítica de componentes, materiais e serviços contemplados (ou não) nesta estimativa de custos:", body))
     elements.append(Spacer(1, 10))
 
-    # ITERAR SOBRE OS 17 SUBSISTEMAS DA EAP
-    for idx, row in df.iterrows():
-        sub_full = str(row["SUBSISTEMA"])
-        prefix = sub_full[:2] # Ex: "01", "02"
-        
-        # Filtrar o DataFrame do Memorial para este prefixo
-        df_filtro = df_mem[df_mem['CODIGO'] == prefix]
-        
-        if not df_filtro.empty:
-            texto_explicativo = str(df_filtro.iloc[0]['DESCRICAO_ETAPA'])
+    if df_mem.empty:
+         elements.append(Paragraph("<i>Nenhum item de memorial carregado. Verifique a aba e a coluna CODIGO.</i>", body))
+    else:
+        for idx, row in df.iterrows():
+            sub_full = str(row["SUBSISTEMA"])
+            prefix = sub_full[:2]
             
-            tabela_memorial = []
-            tabela_memorial.append(Paragraph(sub_full, h3_style))
-            tabela_memorial.append(Paragraph(f"<i>{texto_explicativo}</i>", body))
-            tabela_memorial.append(Spacer(1, 4))
+            df_filtro = df_mem[df_mem['CODIGO'] == prefix]
             
-            mem_data = [[
-                Paragraph("<b>ITEM / SERVIÇO</b>", body_bold_white),
-                Paragraph("<b>STATUS</b>", body_bold_white),
-                Paragraph("<b>OBSERVAÇÕES / PADRÃO</b>", body_bold_white)
-            ]]
-            
-            for _, item_row in df_filtro.iterrows():
-                servico = str(item_row['ITEM'])
-                status_txt = str(item_row['STATUS']).upper()
-                obs = str(item_row['OBSERVACAO'])
+            if not df_filtro.empty:
+                texto_explicativo = str(df_filtro.iloc[0]['DESCRICAO_ETAPA'])
+                if pd.isna(texto_explicativo): texto_explicativo = "Etapa do projeto."
                 
-                # Cor dinâmica baseada no "NÃO"
-                if "NÃO" in status_txt or "NAO" in status_txt:
-                    status_f = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
-                else:
-                    status_f = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
+                tabela_memorial = []
+                tabela_memorial.append(Paragraph(sub_full, h3_style))
+                tabela_memorial.append(Paragraph(f"<i>{texto_explicativo}</i>", body))
+                tabela_memorial.append(Spacer(1, 4))
+                
+                mem_data = [[
+                    Paragraph("<b>ITEM / SERVIÇO</b>", body_bold_white),
+                    Paragraph("<b>STATUS</b>", body_bold_white),
+                    Paragraph("<b>OBSERVAÇÕES / PADRÃO</b>", body_bold_white)
+                ]]
+                
+                for _, item_row in df_filtro.iterrows():
+                    servico = str(item_row.get('ITEM', ''))
+                    status_txt = str(item_row.get('STATUS', '')).upper()
+                    obs = str(item_row.get('OBSERVACAO', ''))
                     
-                mem_data.append([
-                    Paragraph(servico, body),
-                    Paragraph(status_f, body),
-                    Paragraph(obs, body)
-                ])
-                
-            t_mem = Table(mem_data, colWidths=[190, 80, 230])
-            t_mem.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
-                ('PADDING', (0,0), (-1,-1), 3),
-                ('ALIGN', (1,1), (1,-1), 'CENTER'),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ]))
-            
-            tabela_memorial.append(t_mem)
-            tabela_memorial.append(Spacer(1, 8))
-            
-            # KeepTogether evita que a tabela quebre no meio da página
-            elements.append(KeepTogether(tabela_memorial))
+                    if pd.isna(servico) or servico == "nan": continue
+                    
+                    if "NÃO" in status_txt or "NAO" in status_txt:
+                        status_f = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
+                    else:
+                        status_f = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
+                        
+                    mem_data.append([Paragraph(servico, body), Paragraph(status_f, body), Paragraph(obs, body)])
+                    
+                if len(mem_data) > 1:
+                    t_mem = Table(mem_data, colWidths=[190, 80, 230])
+                    t_mem.setStyle(TableStyle([
+                        ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
+                        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+                        ('PADDING', (0,0), (-1,-1), 3),
+                        ('ALIGN', (1,1), (1,-1), 'CENTER'),
+                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ]))
+                    tabela_memorial.append(t_mem)
+                    tabela_memorial.append(Spacer(1, 8))
+                    elements.append(KeepTogether(tabela_memorial))
 
     doc.build(elements, onFirstPage=primeira_pagina, onLaterPages=paginas_seguintes)
     buffer.seek(0)
@@ -434,13 +438,17 @@ with st.form("form_orcamento"):
     exibir_separado = (opcao_exibicao == "SEPARADOS (MATERIAL E MÃO DE OBRA)")
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.3)", use_container_width=True)
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.4)", use_container_width=True)
 
 if submitted:
     with st.spinner("Conectando ao Google Sheets e gerando Dossiê Analítico..."):
-        df = carregar_dados_google_sheets(link_valores)
-        df_mem = carregar_memorial_google_sheets(link_memorial)
+        df, status_val = carregar_dados_google_sheets(link_valores)
+        df_mem, status_mem = carregar_memorial_google_sheets(link_memorial)
         
+        # EXIBIR AVISOS CASO A CONEXÃO FALHE
+        if status_mem != "OK":
+            st.warning(f"⚠️ AVISO MEMORIAL: {status_mem}. O sistema pode não carregar todos os itens. Verifique o link fornecido e se a planilha está com acesso público.")
+            
         fator_padrao = 0.85 if padrao == "BAIXO" else (1.00 if padrao == "MÉDIO" else 1.30)
         fator_fundacao = 0.85 if "LEVE" in tipo_fundacao else (1.35 if "PESADA" in tipo_fundacao else 1.00)
 
@@ -469,16 +477,14 @@ if submitted:
         valor_total = df["CUSTO_FINAL_COM_BDI"].sum()
         valor_m2 = valor_total / area_m2
         
-        # GERAR GRÁFICOS
+        # GERAR GRÁFICOS E PDF
         buf1, buf2 = gerar_graficos_dashboard(df, valor_total, prazo_meses)
-        
-        # GERAR PDF
         pdf_bytes = gerar_dossie_pdf_bytes(
             cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
             padrao, bdi, df, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V3.3 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL V3.4 GERADO COM SUCESSO!")
         
         st.download_button(
             label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (COM MEMORIAL DINÂMICO)",
