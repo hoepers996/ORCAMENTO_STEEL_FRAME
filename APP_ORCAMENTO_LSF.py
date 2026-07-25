@@ -5,17 +5,17 @@ import numpy as np
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable, PageBreak, KeepTogether
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.1", page_icon="🏗️", layout="centered")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V3.2", page_icon="🏗️", layout="centered")
 
 st.title("🏗️ AMÂNCIO — CONSTRUTORA INTELIGENTE")
-st.subheader("GERADOR DE DOSSIÊ COMERCIAL E ORÇAMENTO (V3.1)")
+st.subheader("GERADOR DE DOSSIÊ COMERCIAL E ORÇAMENTO (V3.2)")
 
 st.markdown("---")
 
@@ -31,6 +31,27 @@ COR_DESTAQUE = colors.HexColor(HEX_DESTAQUE)
 COR_SECUNDARIA = colors.HexColor(HEX_SECUNDARIA)
 COR_FUNDO = colors.HexColor(HEX_FUNDO)
 COR_TEXTO = colors.HexColor(HEX_TEXTO)
+
+# BASE DE DADOS DO MEMORIAL DESCRITIVO (ITENS DE CADA SUBSISTEMA)
+MEMORIAL_ESCOPO = {
+    "01": [("Projetos Executivos LSF e Modulação", "INCLUSO", "Elaborado por nossa engenharia"), ("Sondagem SPT e Topografia", "INCLUSO", "Até 3 furos de sondagem padrao"), ("Taxas de Aprovação Prefeitura/Alvará", "NÃO INCLUSO", "Responsabilidade do proprietário")],
+    "02": [("Engenheiro Responsável Técnico (ART)", "INCLUSO", "Acompanhamento e emissão de ART"), ("Mestre de Obras / Encarregado", "INCLUSO", "Gestão diária do canteiro"), ("Seguros de Obra Específicos", "NÃO INCLUSO", "Contratação opcional pelo cliente")],
+    "03": [("Locação de Container / Almoxarifado", "INCLUSO", "Período integral da obra"), ("Ligação Provisória de Água e Luz", "INCLUSO", "Taxas da concessionária à parte"), ("Fechamento Perimetral (Tapumes)", "NÃO INCLUSO", "Cotado à parte caso necessário")],
+    "04": [("Andaimes e Plataformas", "INCLUSO", "Equipamentos de segurança"), ("Ferramental Manual e Elétrico LSF", "INCLUSO", "Parafusadeiras, serras, etc."), ("Guindaste/Munck para Içamentos", "NÃO INCLUSO", "Exceto se previsto em contrato")],
+    "05": [("Radier de Concreto Armado", "INCLUSO", "Fundação rasa padrão"), ("Lona Plástica e Isolamento de Base", "INCLUSO", "Proteção contra umidade ascendente"), ("Estacas Profundas (Solo Mole)", "NÃO INCLUSO", "Depende de laudo de sondagem")],
+    "06": [("Perfis Galvanizados Z275 (Engenheirados)", "INCLUSO", "Estrutura principal de painéis"), ("Parafusos, Ancoragens e Conectores", "INCLUSO", "Fixação estrutural de alta precisão"), ("Laje Seca / Mezanino", "INCLUSO", "Apenas se for projeto de sobrado")],
+    "07": [("Placas Cimentícias Externas (ou EIFS)", "INCLUSO", "Fechamento perimetral"), ("Chapas de Drywall Internas (ST/RU)", "INCLUSO", "Paredes divisórias e áreas molhadas"), ("Isolamento Termoacústico (Lã/EPS)", "INCLUSO", "Preenchimento do miolo das paredes")],
+    "08": [("Trama em LSF para Telhado", "INCLUSO", "Tesouras e treliças"), ("Telhas Termoacústicas (Sanduíche)", "INCLUSO", "Conforto térmico da cobertura"), ("Calhas e Rufos Metálicos", "INCLUSO", "Captação de águas pluviais")],
+    "09": [("Impermeabilização de Áreas Molhadas", "INCLUSO", "Banheiros e cozinhas"), ("Impermeabilização da Base (Radier)", "INCLUSO", "Aplicação de emulsão asfáltica"), ("Impermeabilização de Lajes Expostas", "NÃO INCLUSO", "Sujeito a avaliação arquitetônica")],
+    "10": [("Tubulações PEX/PVC e Conexões", "INCLUSO", "Água fria, água quente e esgoto"), ("Caixa D'Água e Reservatório", "INCLUSO", "Volume dimensionado em projeto"), ("Louças, Metais Finos e Chuveiros", "NÃO INCLUSO", "Aquisição pelo proprietário")],
+    "11": [("Eletrodutos, Fios e Cabos", "INCLUSO", "Infraestrutura completa nas paredes"), ("Quadros de Distribuição e Disjuntores", "INCLUSO", "Montagem dos circuitos"), ("Luminárias, Lustres e Lâmpadas", "NÃO INCLUSO", "Aquisição pelo proprietário")],
+    "12": [("Infraestrutura de Tubulação de Cobre", "INCLUSO", "Esperas para ar-condicionado"), ("Drenos e Ponto Elétrico", "INCLUSO", "Pronto para instalação"), ("Aparelhos de Ar-Condicionado (Splits)", "NÃO INCLUSO", "Equipamentos e instalação final não inclusos")],
+    "13": [("Massa Corrida e Pintura Interna/Externa", "INCLUSO", "Acabamento das paredes"), ("Porcelanatos e Revestimentos Cerâmicos", "INCLUSO", "Considerado valor de tabela referencial"), ("Mármores, Granitos e Pedras Especiais", "NÃO INCLUSO", "Bancadas cotadas com marmoraria")],
+    "14": [("Regularização e Contrapiso", "INCLUSO", "Preparo para o piso final"), ("Rodapés (Poliestireno ou Madeira)", "INCLUSO", "Acabamento de bordas"), ("Pisos Vinílicos / Laminados Especiais", "NÃO INCLUSO", "Caso opte, substitui o porcelanato")],
+    "15": [("Janelas em Esquadria de Alumínio", "INCLUSO", "Padrão das fachadas"), ("Portas Internas (Madeira/MDF)", "INCLUSO", "Com ferragens e batentes"), ("Porta Principal Pivotante Especial", "NÃO INCLUSO", "Decorativa, escolha do cliente")],
+    "16": [("Calçada Perimetral (1m largura)", "INCLUSO", "Acesso e proteção da base"), ("Muros de Divisa e Portões", "NÃO INCLUSO", "Projeto externo à edificação"), ("Paisagismo, Grama e Piscina", "NÃO INCLUSO", "Área de lazer externa")],
+    "17": [("Limpeza Grossa e Remoção de Entulho", "INCLUSO", "Manutenção do canteiro limpo"), ("Caçambas de Resíduos", "INCLUSO", "Descarte ecológico dos materiais"), ("Limpeza Fina e Especializada (Pós-Obra)", "NÃO INCLUSO", "Limpeza para mudança (vidros, ceras)")]
+}
 
 # 2. CARREGAR DADOS DO GOOGLE SHEETS
 @st.cache_data(ttl=60)
@@ -64,7 +85,7 @@ def carregar_dados_google_sheets():
         ]
         return pd.DataFrame(data_backup)
 
-# 3. GERADOR DE GRÁFICOS DO DASHBOARD (VISUAL BI MODERNIZADO)
+# 3. GERADOR DE GRÁFICOS DO DASHBOARD
 def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     macro_map = {
         '01': '1. Gestão e Canteiro', '02': '1. Gestão e Canteiro', '03': '1. Gestão e Canteiro', '04': '1. Gestão e Canteiro',
@@ -81,7 +102,6 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     
     palette = [HEX_PRIMARIA, HEX_DESTAQUE, HEX_SECUNDARIA, '#319795', '#D69E2E']
     
-    # ROSCA ESTILO DASHBOARD (COM CENTRO VAZADO E VALOR)
     fig1, ax1 = plt.subplots(figsize=(6.2, 2.7))
     labels = [f"{row['MACRO_GRUPO']}\n({row['PARTICIPACAO']:.1f}%)" for idx, row in grouped.iterrows()]
     
@@ -89,12 +109,9 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
             wedgeprops=dict(width=0.45, edgecolor='white', linewidth=2.5),
             textprops=dict(fontsize=7, fontweight='bold', color=HEX_TEXTO))
             
-    # Circulo branco no meio
     centre_circle = plt.Circle((0,0), 0.55, fc='white')
     ax1.add_artist(centre_circle)
-    # Texto no centro
     ax1.annotate(f"TOTAL\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=9, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
-    
     ax1.set_title("DISTRIBUIÇÃO FINANCEIRA POR MACRO-GRUPO DE OBRA", fontsize=9.5, fontweight='bold', color=HEX_PRIMARIA, pad=8)
     plt.tight_layout()
     buf1 = io.BytesIO()
@@ -102,7 +119,6 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     plt.close(fig1)
     buf1.seek(0)
     
-    # GANTT + CURVA S (ESTILO POWER BI)
     fig2, (ax_gantt, ax_curva) = plt.subplots(2, 1, figsize=(6.2, 4.4), gridspec_kw={'height_ratios': [1.1, 1]})
     macro_tasks = grouped['MACRO_GRUPO'].tolist()[::-1]
     m = prazo_meses
@@ -118,7 +134,6 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     ax_gantt.spines['top'].set_visible(False)
     ax_gantt.spines['right'].set_visible(False)
     
-    # Curva S
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
     x = np.linspace(-2, 2, prazo_meses)
     weights = np.exp(-x**2)
@@ -128,7 +143,6 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     bars = ax_curva.bar(meses_labels, perc_mensal, color=HEX_SECUNDARIA, alpha=0.8, width=0.45, edgecolor='white')
     ax_curva_line = ax_curva.twinx()
     
-    # Efeito de preenchimento na Curva S
     ax_curva_line.fill_between(meses_labels, 0, perc_acum, color=HEX_DESTAQUE, alpha=0.1)
     ax_curva_line.plot(meses_labels, perc_acum, color=HEX_DESTAQUE, marker='o', linewidth=2.5, markersize=5)
     
@@ -142,10 +156,8 @@ def gerar_graficos_dashboard(df, valor_total, prazo_meses=6):
     ax_curva.tick_params(axis='both', labelsize=7.0)
     ax_curva_line.tick_params(axis='both', labelsize=7.0)
     ax_curva.grid(axis='y', linestyle='--', alpha=0.3)
-    
     ax_curva.spines['top'].set_visible(False)
     ax_curva_line.spines['top'].set_visible(False)
-    
     ax_curva_line.set_ylim(0, 115)
     ax_curva.set_ylim(0, max(perc_mensal)*1.25)
     
@@ -179,7 +191,9 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     sub_cover = ParagraphStyle('CoverSub', fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=COR_DESTAQUE, alignment=1, spaceAfter=20)
     
     h1_style = ParagraphStyle('H1Style', fontName='Helvetica-Bold', fontSize=14, leading=17, textColor=COR_PRIMARIA, spaceAfter=4)
-    h2_style = ParagraphStyle('H2Style', fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COR_DESTAQUE, spaceBefore=8, spaceAfter=4)
+    h2_style = ParagraphStyle('H2Style', fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=COR_DESTAQUE, spaceBefore=10, spaceAfter=4)
+    h3_style = ParagraphStyle('H3Style', fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=COR_PRIMARIA, spaceBefore=8, spaceAfter=4)
+    
     body = ParagraphStyle('Body', fontName='Helvetica', fontSize=8, leading=10.5, textColor=COR_TEXTO)
     body_bold = ParagraphStyle('BodyBold', fontName='Helvetica-Bold', fontSize=8, leading=10.5, textColor=COR_TEXTO)
     body_bold_white = ParagraphStyle('BodyBoldWhite', fontName='Helvetica-Bold', fontSize=8, leading=10.5, textColor=colors.white)
@@ -189,7 +203,6 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     # ==================== PÁGINA 1: CAPA INSTITUCIONAL ====================
     elements.append(HRFlowable(width="100%", thickness=3.5, color=COR_DESTAQUE, spaceAfter=15))
     
-    # AJUSTE INTELIGENTE DE PROPORÇÃO DA LOGO
     if os.path.exists("logo.png"):
         try:
             img_reader = ImageReader("logo.png")
@@ -197,7 +210,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
             aspect = img_w / float(img_h)
             new_w = 3.0 * inch
             new_h = new_w / aspect
-            if new_h > 1.2 * inch: # Trava altura máxima
+            if new_h > 1.2 * inch:
                 new_h = 1.2 * inch
                 new_w = new_h * aspect
             elements.append(Image("logo.png", width=new_w, height=new_h))
@@ -222,7 +235,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>ÁREA DA FUNDAÇÃO:</b>", body_bold), Paragraph(f"{area_fundacao_m2:,.2f} M² ({tipo_fundacao.split(' ')[0]})", body)],
         [Paragraph("<b>PADRÃO DE ACABAMENTO:</b>", body_bold), Paragraph(f"{padrao} PADRÃO", body)],
         [Paragraph("<b>PRAZO DE EXECUÇÃO:</b>", body_bold), Paragraph(f"{prazo_meses} MESES", body)],
-        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.1 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
+        [Paragraph("<b>VERSÃO DO DOCUMENTO:</b>", body_bold), Paragraph("V3.2 — DOSSIÊ COMERCIAL AMÂNCIO", body)]
     ]
     t_capa = Table(info_capa, colWidths=[160, 300])
     t_capa.setStyle(TableStyle([
@@ -247,8 +260,9 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
         [Paragraph("<b>SEÇÃO</b>", body_bold_white), Paragraph("<b>DESCRIÇÃO DO CONTEÚDO</b>", body_bold_white), Paragraph("<b>PÁG.</b>", body_bold_white)],
         [Paragraph("01", body), Paragraph("Capa Comercial Institucional e Dados do Cliente", body), Paragraph("01", body)],
         [Paragraph("02", body), Paragraph("Sumário, Apresentação da Amâncio e Vantagens da Engenharia LSF", body), Paragraph("02", body)],
-        [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada (17 Itens)", body), Paragraph("03", body)],
-        [Paragraph("04", body), Paragraph("Dashboards Executivos: Macro-Grupos, Cronograma e Curva S", body), Paragraph("04", body)]
+        [Paragraph("03", body), Paragraph("Proposta Financeira, Resumo Executivo e EAP Detalhada", body), Paragraph("03", body)],
+        [Paragraph("04", body), Paragraph("Dashboards Executivos: Macro-Grupos, Cronograma e Curva S", body), Paragraph("04", body)],
+        [Paragraph("05", body), Paragraph("Memorial Descritivo: Escopo Analítico (Inclusos e Não Inclusos)", body), Paragraph("05", body)]
     ]
     t_sumario = Table(sumario_data, colWidths=[55, 405, 40])
     t_sumario.setStyle(TableStyle([
@@ -363,7 +377,64 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(Spacer(1, 4))
     elements.append(Image(buf2, width=6.2*inch, height=4.4*inch))
     
-    # Usa a paginação para gerar
+    elements.append(PageBreak())
+
+    # ==================== PÁGINA 5: MEMORIAL DESCRITIVO ====================
+    elements.append(Paragraph("MEMORIAL DESCRITIVO PRELIMINAR (ESCOPO)", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=15))
+    elements.append(Paragraph("Relação analítica de componentes, materiais e serviços contemplados (ou não) nesta estimativa de custos:", body))
+    elements.append(Spacer(1, 10))
+
+    # GERAR TABELAS DO MEMORIAL PARA CADA ITEM
+    for idx, row in df.iterrows():
+        sub_full = str(row["SUBSISTEMA"])
+        prefix = sub_full[:2] # Pega o "01", "02" etc.
+        
+        # Pega a lista do memorial (ou usa genérico se falhar)
+        itens_escopo = MEMORIAL_ESCOPO.get(prefix, [("Itens da etapa", "INCLUSO", "Conforme projeto padrão")])
+        
+        # Manter o título junto com a tabela (evitar quebrar de página no meio)
+        tabela_memorial = []
+        tabela_memorial.append(Paragraph(sub_full, h3_style))
+        
+        mem_data = [[
+            Paragraph("<b>ITEM / SERVIÇO</b>", body_bold_white),
+            Paragraph("<b>STATUS</b>", body_bold_white),
+            Paragraph("<b>OBSERVAÇÕES / PADRÃO</b>", body_bold_white)
+        ]]
+        
+        for item in itens_escopo:
+            servico = item[0]
+            status_txt = item[1]
+            obs = item[2]
+            
+            # Formatação de cor baseada no status
+            if "NÃO" in status_txt:
+                status_f = f'<font color="{HEX_DESTAQUE}"><b>{status_txt}</b></font>'
+            else:
+                status_f = f'<font color="{HEX_PRIMARIA}"><b>{status_txt}</b></font>'
+                
+            mem_data.append([
+                Paragraph(servico, body),
+                Paragraph(status_f, body),
+                Paragraph(obs, body)
+            ])
+            
+        t_mem = Table(mem_data, colWidths=[200, 90, 210])
+        t_mem.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), COR_SECUNDARIA),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E0')),
+            ('PADDING', (0,0), (-1,-1), 3),
+            ('ALIGN', (1,1), (1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        
+        tabela_memorial.append(t_mem)
+        tabela_memorial.append(Spacer(1, 8))
+        
+        elements.append(KeepTogether(tabela_memorial))
+
+    # Usa a paginação
     doc.build(elements, onFirstPage=primeira_pagina, onLaterPages=paginas_seguintes)
     buffer.seek(0)
     return buffer.getvalue()
@@ -396,10 +467,10 @@ with st.form("form_orcamento"):
     
     bdi = st.slider("PERCENTUAL DE BDI / MARGEM (%):", min_value=10, max_value=35, value=20) / 100.0
     
-    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.1)")
+    submitted = st.form_submit_button("🚀 GERAR DOSSIÊ COMERCIAL AMÂNCIO (V3.2)")
 
 if submitted:
-    st.success("✅ DOSSIÊ COMERCIAL V3.1 GERADO COM SUCESSO!")
+    st.success("✅ DOSSIÊ COMERCIAL V3.2 GERADO COM SUCESSO!")
     
     df = carregar_dados_google_sheets()
     
@@ -455,44 +526,25 @@ if submitted:
     # GERAR GRÁFICOS
     buf1, buf2 = gerar_graficos_dashboard(df, valor_total, prazo_meses)
     
-    # GERAR PDF 4 PÁGINAS
+    # GERAR PDF (AGORA COM 5+ PÁGINAS)
     pdf_bytes = gerar_dossie_pdf_bytes(
         cliente, local, area_m2, area_fundacao_m2, tipo_fundacao, 
         padrao, bdi, df, valor_total, valor_m2, prazo_meses, exibir_separado, buf1, buf2
     )
     
     st.download_button(
-        label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF 4 PÁGINAS)",
+        label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO COM MEMORIAL (PDF)",
         data=pdf_bytes,
-        file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
+        file_name=f"DOSSIE_AMANCIO_V3.2_{cliente.replace(' ', '_').upper()}.pdf",
         mime="application/pdf"
     )
 
-    with st.expander("👁️ VER PRÉ-VISUALIZAÇÃO DO DOSSIÊ NA TELA"):
-        st.markdown("### 📄 PÁGINA 1: CAPA INSTITUCIONAL AMÂNCIO")
-        st.info(f"PROPOSTA COMERCIAL: {cliente.upper()} | {local.upper()} | R$ {valor_total:,.2f}")
-        
-        st.markdown("### 📄 PÁGINA 2: INSTITUCIONAL E DIFERENCIAIS LSF")
-        st.markdown("*Apresentação da Amâncio Construtora Inteligente e Vantagens do Steel Frame.*")
-        
-        st.markdown("### 📄 PÁGINA 3: PROPOSTA FINANCEIRA E EAP")
-        if exibir_separado:
-            df_preview = df[["SUBSISTEMA", "CUSTO_MAT_FINAL", "CUSTO_MO_FINAL", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
-            df_preview.columns = ["Subsistema", "Material (R$)", "Mão de Obra (R$)", "Total com BDI (R$)", "Part. (%)"]
-            st.dataframe(df_preview.style.format({
-                "Material (R$)": "R$ {:,.2f}",
-                "Mão de Obra (R$)": "R$ {:,.2f}",
-                "Total com BDI (R$)": "R$ {:,.2f}",
-                "Part. (%)": "{:.1f}%"
-            }), use_container_width=True)
-        else:
-            df_preview = df[["SUBSISTEMA", "CUSTO_FINAL_COM_BDI", "PARTICIPACAO_PCT"]].copy()
-            df_preview.columns = ["Subsistema", "Valor com BDI (R$)", "Part. (%)"]
-            st.dataframe(df_preview.style.format({
-                "Valor com BDI (R$)": "R$ {:,.2f}",
-                "Part. (%)": "{:.1f}%"
-            }), use_container_width=True)
-            
-        st.markdown("### 📊 PÁGINA 4: DASHBOARDS EXECUTIVOS AMÂNCIO")
-        st.image(buf1, caption="Composição Financeira por Macro-Grupos", use_column_width=True)
-        st.image(buf2, caption="Cronograma Físico de Execução e Curva S de Desembolso", use_column_width=True)
+    with st.expander("👁️ VER RESUMO DA ESTRUTURA DO DOSSIÊ NA TELA"):
+        st.markdown("O sistema gerou com sucesso o documento paginado contendo:")
+        st.markdown("""
+        * **Pág 1:** Capa Institucional (Com a logo ajustada proporcionalmente)
+        * **Pág 2:** Sumário e Apresentação (Textos comerciais amadurecidos)
+        * **Pág 3:** Proposta Financeira e EAP (Tabelas com letras brancas nas barras azuis)
+        * **Pág 4:** Dashboards Executivos (Visual mais moderno de Business Intelligence)
+        * **Pág 5+:** NOVO! Memorial Descritivo com Escopo de 17 Tabelas de Inclusos e Exclusos
+        """)
