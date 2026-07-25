@@ -13,7 +13,7 @@ import io
 import os
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CORES
-st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.3", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="AMÂNCIO - ORÇAMENTADOR LSF V4.3.1", page_icon="🏗️", layout="wide")
 
 HEX_PRIMARIA = "#0F2C3D"
 HEX_DESTAQUE = "#E83F25"
@@ -82,10 +82,9 @@ with st.sidebar:
     st.success("Planilha de Custos Conectada")
     st.success("Memorial Descritivo Conectado")
 
-# 3. GERADORES DE DASHBOARDS CORRIGIDOS (PROPORÇÃO E PESO FINANCEIRO)
+# 3. GERADORES DE DASHBOARDS CORRIGIDOS
 
 def processar_macro_etapas(df, valor_total):
-    # Consolidando tudo em 5 grandes macros para visualização limpa!
     macro_map = {
         '01': '1. Canteiro e Gestão', '02': '1. Canteiro e Gestão', '03': '1. Canteiro e Gestão', '04': '1. Canteiro e Gestão',
         '05': '2. Fundação e Infra', '09': '2. Fundação e Infra',
@@ -97,7 +96,6 @@ def processar_macro_etapas(df, valor_total):
     df_macro['MACRO'] = df_macro['SUBSISTEMA'].apply(lambda x: macro_map.get(str(x)[:2], 'Outros'))
     grouped = df_macro.groupby('MACRO')['CUSTO_FINAL_COM_BDI'].sum().reset_index()
     
-    # Ordem fixa para o gráfico e Gantt
     ordem_correta = [
         '1. Canteiro e Gestão', '2. Fundação e Infra', '3. Estrutura LSF/Telhado', 
         '4. Vedações/Instalações', '5. Acabamentos/Externos'
@@ -109,7 +107,7 @@ def processar_macro_etapas(df, valor_total):
     return grouped
 
 def plot_custo_etapa(grouped, valor_total):
-    fig = plt.figure(figsize=(8, 4), facecolor=HEX_FUNDO) # Proporção perfeitamente circular
+    fig = plt.figure(figsize=(8, 4), facecolor=HEX_FUNDO)
     ax = fig.add_subplot(111)
     
     palette = [HEX_PRIMARIA, HEX_SECUNDARIA, HEX_DESTAQUE, '#319795', '#D69E2E']
@@ -130,7 +128,7 @@ def plot_custo_etapa(grouped, valor_total):
     ax.add_artist(centre_circle)
     ax.annotate(f"TOTAL\nR$ {valor_total/1000:,.0f}k", xy=(0, 0), fontsize=12, fontweight='bold', ha='center', va='center', color=HEX_PRIMARIA)
     
-    ax.axis('equal') # FORÇA A ROSCA A FICAR REDONDA!
+    ax.axis('equal') 
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
@@ -139,41 +137,34 @@ def plot_custo_etapa(grouped, valor_total):
     return buf
 
 def plot_gantt_e_curvas(grouped, prazo_meses):
-    # Lógica de peso financeiro: Etapas que custam mais, demoram mais e começam baseadas nas anteriores
     pesos = grouped['PESO'].tolist()
-    
     m = prazo_meses
     
-    # DURAÇÃO BASEADA NO PESO FINANCEIRO (% DO CUSTO = % DO PRAZO + Margem LSF)
-    # Ex: Acabamento custa muito, barra longa. Fundação custa pouco, barra curta.
-    d1 = max(m * pesos[0] * 1.5, m * 0.2) # Canteiro
-    d2 = max(m * pesos[1] * 2.0, m * 0.2) # Fundação
-    d3 = max(m * pesos[2] * 2.0, m * 0.3) # Estrutura
-    d4 = max(m * pesos[3] * 1.8, m * 0.3) # Vedações
-    d5 = max(m * pesos[4] * 2.0, m * 0.3) # Acabamentos
+    d1 = max(m * pesos[0] * 1.5, m * 0.2) 
+    d2 = max(m * pesos[1] * 2.0, m * 0.2) 
+    d3 = max(m * pesos[2] * 2.0, m * 0.3) 
+    d4 = max(m * pesos[3] * 1.8, m * 0.3) 
+    d5 = max(m * pesos[4] * 2.0, m * 0.3) 
     durations = [d1, d2, d3, d4, d5]
     
-    # START BASEADO EM SOBREPOSIÇÃO INTELIGENTE (Engenharia Simultânea LSF)
     s1 = 0
-    s2 = s1 + (d1 * 0.3) # Fundação começa logo após início do canteiro
-    s3 = s2 + (d2 * 0.5) # Estrutura começa quando base atinge 50%
-    s4 = s3 + (d3 * 0.4) # Vedação entra quando aço está em 40%
-    s5 = s4 + (d4 * 0.6) # Acabamento espera vedações passarem de 60%
-    
-    # Ajuste fino para não estourar o prazo final
+    s2 = s1 + (d1 * 0.3) 
+    s3 = s2 + (d2 * 0.5) 
+    s4 = s3 + (d3 * 0.4) 
+    s5 = s4 + (d4 * 0.6) 
     starts = [s1, s2, s3, s4, s5]
+    
     max_end = max([starts[i] + durations[i] for i in range(5)])
     if max_end > m:
         fator = m / max_end
         starts = [s * fator for s in starts]
-        durations = [d * fator for s in durations]
+        durations = [d * fator for d in durations] # FIX: Corrigido for d in durations
         
-    # Invertendo para o gráfico de baixo para cima
     macro_tasks = grouped['MACRO'].tolist()[::-1]
     starts = starts[::-1]
     durations = durations[::-1]
     
-    # --- DESENHO DO GANTT ---
+    # --- GANTT ---
     fig_gantt = plt.figure(figsize=(9, 2.8), facecolor=HEX_FUNDO)
     ax_gantt = fig_gantt.add_subplot(111)
     
@@ -201,17 +192,15 @@ def plot_gantt_e_curvas(grouped, prazo_meses):
     plt.close(fig_gantt)
     buf_gantt.seek(0)
     
-    # --- DESENHO DA CURVA S ---
+    # --- CURVA S ---
     fig_curva = plt.figure(figsize=(9, 3.2), facecolor=HEX_FUNDO)
     ax_curva = fig_curva.add_subplot(111)
     
     x_coords = np.arange(0.5, prazo_meses + 0.5)
     meses_labels = [f"Mês {i+1}" for i in range(prazo_meses)]
     
-    # SIMULAÇÃO DA CURVA S BASEADA NO DESLOCAMENTO DO PESO
-    # Isso empurra o pico da Gaussiana para onde a obra realmente exige recurso
-    pico_previsto = sum([starts[i] + (durations[i]/2) for i in range(5)]) / 5 # Centro de gravidade da obra
-    deslocamento = (pico_previsto / m) * 4 - 2 # Converte para o eixo gaussiano
+    pico_previsto = sum([starts[i] + (durations[i]/2) for i in range(5)]) / 5 
+    deslocamento = (pico_previsto / m) * 4 - 2 
     
     x = np.linspace(-2.5, 2.5, prazo_meses)
     weights = np.exp(-(x - deslocamento)**2)
@@ -418,7 +407,7 @@ def gerar_dossie_pdf_bytes(cliente, local, area_m2, area_fundacao_m2, tipo_funda
     elements.append(t_detalhes)
     elements.append(PageBreak())
     
-    # --- PÁGINA 4: DASHBOARDS (COM PROPORÇÕES CORRIGIDAS) ---
+    # --- PÁGINA 4: DASHBOARDS ---
     elements.append(Paragraph("SÍNTESE DE PREVISIBILIDADE E FLUXO DE EXECUÇÃO", h1_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_DESTAQUE, spaceAfter=8))
     
@@ -579,12 +568,12 @@ if submitted:
             padrao, bdi, df_val, df_mem, valor_total, valor_m2, prazo_meses, exibir_separado, buf_rosca, buf_gantt, buf_curva
         )
         
-        st.success("✅ DOSSIÊ COMERCIAL V4.3 GERADO COM SUCESSO!")
+        st.success("✅ DOSSIÊ COMERCIAL GERADO COM SUCESSO!")
         
         st.download_button(
             label="📥 BAIXAR DOSSIÊ COMERCIAL AMÂNCIO (PDF COMPLETO)",
             data=pdf_bytes,
-            file_name=f"DOSSIE_AMANCIO_V4.3_{cliente.replace(' ', '_').upper()}.pdf",
+            file_name=f"DOSSIE_AMANCIO_{cliente.replace(' ', '_').upper()}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
